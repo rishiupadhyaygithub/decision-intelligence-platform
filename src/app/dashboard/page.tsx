@@ -45,9 +45,9 @@ export default async function DashboardPage() {
         <div className="bg-white rounded-xl border border-slate-200 p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-medium text-slate-900">Recent decisions</h3>
-            <button className="bg-slate-900 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-800">
-              + New decision
-            </button>
+            <a href="/dashboard/new-decision" className="bg-slate-900 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-800">
+  + New decision
+</a>
           </div>
           <div className="text-center py-12 text-slate-400 text-sm">
             No decisions yet. Create your first one.
