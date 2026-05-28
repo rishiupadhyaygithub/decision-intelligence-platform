@@ -1,36 +1,31 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# DecisionOS — Decision Intelligence Platform
 
-## Getting Started
+> Built on synthetic ERP/CRM data (Apex Retail India). Turns business data into structured, auditable decisions.
 
-First, run the development server:
+## What it does
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+Most businesses drown in dashboards but still make decisions on gut feel. DecisionOS solves that — it takes raw operational data (sales, inventory, CRM pipeline) and surfaces *what to decide next*, not just what happened.
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Three layers:
+- **Memory Layer** — Immutable decision log with semantic search across past decisions
+- **Strategy Layer** — AI-powered enrichment, outcome simulation, scenario modeling
+- **Action Layer** — Human-in-the-loop approval flows; connects to ERP/CRM/Slack
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Demo Dataset
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Built on Apex Retail India — a synthetic 50-SKU retail business with:
+- Live inventory anomaly alerts (stockout risk, overstock signals)
+- CRM pipeline block detection
+- SQL-driven insight extraction
 
-## Learn More
+## Stack
 
-To learn more about Next.js, take a look at the following resources:
+Next.js 14 · TypeScript · Supabase · Clerk Auth · Claude API · Recharts
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Status
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+MVP scaffold complete. Core decision engine and UI functional. Actively building.
 
-## Deploy on Vercel
+## Why I built this
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+I kept seeing the same problem: analysts build great dashboards, leadership ignores them, decisions happen in WhatsApp threads. This bridges that gap.
