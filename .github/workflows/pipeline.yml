@@ -1,0 +1,23 @@
+name: decisionos-pipeline
+
+# Orchestration backbone: runs the ingest -> fact/ML recompute loop on a schedule.
+# Free (GitHub-hosted runner). Secrets live in repo settings, never in the repo.
+on:
+  schedule:
+    - cron: '0 6 * * *' # daily 06:00 UTC
+  workflow_dispatch: {} # "Run now" button in the Actions tab
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - name: Run pipeline
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: node scripts/pipeline/run.mjs

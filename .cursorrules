@@ -1,0 +1,29 @@
+# DecisionOS — project rules (binding)
+
+## Stack (locked, all free-tier — user pays nothing)
+- Next.js 16 (app router) + TypeScript strict. THIS folder is the single project root.
+- Supabase Postgres (free tier) = state + facts + auth + RLS.
+- LLM = Google Gemini free tier (flash-lite = retrieval/cheap, flash = final reasoning). SERVER-SIDE ONLY.
+- ML = offline Python batch (scikit-learn / statsmodels). Writes facts back. NEVER a live server.
+- Package manager: npm (package-lock.json present). Do NOT switch to bun/pnpm/yarn.
+
+## Hard rules (violating these is a bug)
+- GROUNDING CONTRACT: any numeric claim shown to a user MUST cite a `facts.id`.
+  A deterministic validator rejects agent output containing numbers with no backing fact.
+  Computed scores (confidence, data_health) are written by CODE, never invented by the LLM.
+- NO API keys in the browser. All model calls go through Next.js server routes.
+  Never ship `anthropic-dangerous-direct-browser-access` or any key to the client.
+- NO new paid services. NO new paid npm packages without asking first.
+- Synthetic data must be labeled "synthetic" in the UI. Never present it as live.
+- Keep files < 500 lines. Validate input at boundaries with zod.
+- RLS must be ON for every table before any real multi-tenant use (migration 0003).
+
+## Layout
+- src/app             routes + pages
+- src/lib/agents      retriever · reasoner · skeptic · validator · scorer (model-agnostic adapter)
+- src/lib/facts       fact read/compute helpers
+- src/lib/types.ts    shared contract types (mirror the SQL schema)
+- supabase/migrations SQL contract: 0001 schema · 0002 views · 0003 RLS · 0004 embeddings
+- scripts/seed        synthetic Savora data generator
+- scripts/facts       fact compute job
+- ml                  offline Python ML (forecast/churn/sentiment)

@@ -1,0 +1,8 @@
+# Supabase local/dev config — links migrations folder for GitHub integration
+project_id = "decision-intelligence-platform"
+
+[db]
+major_version = 17
+
+[db.migrations]
+enabled = true
