@@ -5,7 +5,22 @@ import TopNav from '@/components/TopNav'
 import { SyntheticNote, SeverityPill, GroundedBadge, FactChip, Gauge } from '@/components/decisionos'
 import OutcomeForm from '@/components/OutcomeForm'
 import CloseDecisionButton from '@/components/CloseDecisionButton'
+import { LayerTabs } from '@/components/LayerTabs'
 import type { OutcomeRow } from '@/lib/types'
+
+// Pull sku + region from the first cited fact that carries both dims.
+// Falls back to a demo default so L2/L3 panels still render on cold decisions.
+function extractContext(
+  factRows: { facts: { dims?: Record<string, unknown> | null } | null }[],
+): { sku: string; region: string } {
+  for (const r of factRows) {
+    const dims = (r.facts?.dims ?? {}) as Record<string, unknown>
+    const sku = typeof dims.sku === 'string' ? dims.sku : null
+    const region = typeof dims.region === 'string' ? dims.region : null
+    if (sku && region) return { sku, region }
+  }
+  return { sku: 'SC-001', region: 'West' }
+}
 
 export default async function DecisionDetail({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -24,7 +39,7 @@ export default async function DecisionDetail({ params }: { params: Promise<{ id:
     supabase.from('alternatives').select('*').eq('decision_id', id),
     supabase
       .from('decision_facts')
-      .select('fact_id, facts(id,metric,value,value_text,time_window)')
+      .select('fact_id, facts(id,metric,dims,value,value_text,time_window)')
       .eq('decision_id', id),
     supabase.from('audit_log').select('*').eq('decision_id', id).order('created_at', { ascending: true }),
     supabase
@@ -42,11 +57,13 @@ export default async function DecisionDetail({ params }: { params: Promise<{ id:
     facts: {
       id: string
       metric: string
+      dims: Record<string, unknown> | null
       value: number | null
       value_text: string | null
       time_window: string | null
     } | null
   }[]
+  const ctx = extractContext(facts)
   const audit = auditRes.data ?? []
   const outcomes = outcomeRes.data ?? []
 
@@ -77,6 +94,17 @@ export default async function DecisionDetail({ params }: { params: Promise<{ id:
               {decision.whynow}
             </p>
           )}
+        </div>
+
+        {/* W6 — 4-layer decision view: What / Why / Will / Should */}
+        <div className="bg-white rounded-xl border border-slate-200 p-6">
+          <div className="mb-3 flex items-baseline justify-between">
+            <h3 className="font-medium text-slate-900">Decision layers</h3>
+            <span className="text-xs text-slate-500">
+              context: <span className="font-mono">{ctx.sku}</span> · <span className="font-mono">{ctx.region}</span>
+            </span>
+          </div>
+          <LayerTabs sku={ctx.sku} region={ctx.region} analysis={null} />
         </div>
 
         {e && (
