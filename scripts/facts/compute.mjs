@@ -36,7 +36,18 @@ async function readView(sb, name) {
 export async function computeFacts(sb) {
   const facts = []
   const now = new Date().toISOString()
-  const push = (metric, dims, value, opts = {}) =>
+  // Every metric maps to a formula_id and a source view for lineage. Kept
+  // inline (not the app-side registry) so the pipeline stays standalone.
+  const FORMULA = {
+    revenue_trend_recent: { formula_id: 'revenue_trend_recent', source: 'v_revenue_by_region_daily' },
+    revenue_anomaly_z:    { formula_id: 'revenue_anomaly_z',    source: 'v_revenue_by_region_daily' },
+    margin_pct:           { formula_id: 'margin_pct',           source: 'v_margin' },
+    sku_velocity_delta:   { formula_id: 'sku_velocity_delta',   source: 'v_sku_velocity' },
+    inventory_cover_ratio:{ formula_id: 'inventory_cover_ratio',source: 'v_inventory_risk' },
+    competitor_pressure_pct:{ formula_id: 'competitor_pressure_pct', source: 'v_competitor_pressure' },
+  }
+  const push = (metric, dims, value, opts = {}) => {
+    const spec = FORMULA[metric] || {}
     facts.push({
       id: factId(metric, dims),
       metric,
@@ -48,7 +59,11 @@ export async function computeFacts(sb) {
       sample_n: opts.n ?? null,
       confidence: opts.confidence ?? (opts.n ? conf(opts.n) : null),
       computed_at: now,
+      formula_id: opts.formulaId ?? spec.formula_id ?? metric,
+      source_rows: opts.sourceRows ?? (spec.source ? [{ table: spec.source, pk: JSON.stringify(dims) }] : []),
+      unstable: false,
     })
+  }
 
   const rev = await readView(sb, 'v_revenue_by_region_daily')
   const byRegion = {}
@@ -130,7 +145,12 @@ export async function computeFacts(sb) {
   // Merge live ML facts (Holt demand forecast, logreg churn, rule sentiment)
   // into the same pass so they survive the stale-cleanup below.
   const mlFacts = await computeMlFacts(sb)
-  facts.push(...mlFacts)
+  for (const f of mlFacts) {
+    f.formula_id = f.formula_id ?? f.metric
+    f.source_rows = f.source_rows ?? []
+    f.unstable = f.unstable ?? false
+    facts.push(f)
+  }
 
   if (!facts.length) throw new Error('No facts computed — is the seed loaded?')
 

@@ -49,10 +49,10 @@ type ChurnResp = {
 
 type Merged = {
   week: string
-  actual?: number
-  p50?: number
-  band_low?: number
-  band_width?: number
+  actual: number | null
+  p50: number | null
+  band_low: number | null
+  band_width: number | null
 }
 
 function bandColor(risk: number): string {
@@ -113,9 +113,16 @@ export function ForecastChart({
   if (!fc || !ch) return <div className="text-sm text-neutral-500">Running forecast…</div>
 
   const rows: Merged[] = [
-    ...fc.history.map((h) => ({ week: h.week, actual: h.value })),
+    ...fc.history.map((h) => ({
+      week: h.week,
+      actual: h.value,
+      p50: null,
+      band_low: null,
+      band_width: null,
+    })),
     ...fc.forecast.point.map((p) => ({
       week: p.week,
+      actual: null,
       p50: p.p50,
       band_low: p.p10,
       band_width: Math.max(0, p.p90 - p.p10),

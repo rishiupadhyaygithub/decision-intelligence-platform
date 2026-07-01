@@ -12,6 +12,10 @@ interface FactRow {
   sample_n: number | null
   confidence: number | null
   computed_at: string
+  data_health: number | null
+  formula_id: string | null
+  unstable: boolean | null
+  source_rows: unknown
 }
 
 function toFact(r: FactRow): Fact {
@@ -26,6 +30,12 @@ function toFact(r: FactRow): Fact {
     sampleN: r.sample_n,
     confidence: r.confidence,
     computedAt: r.computed_at,
+    data_health: r.data_health,
+    formula_id: r.formula_id,
+    unstable: !!r.unstable,
+    source_rows: Array.isArray(r.source_rows)
+      ? (r.source_rows as Array<{ table: string; pk: string | number }>)
+      : [],
   }
 }
 

@@ -17,6 +17,11 @@ export interface Fact {
   sampleN: number | null
   confidence: number | null  // 0..1, computed
   computedAt: string
+  // Trust + lineage columns (migration 0007).
+  data_health: number | null      // 0..1, freshness × completeness × source_conf
+  formula_id: string | null       // -> src/lib/metrics/registry.ts entry
+  unstable: boolean               // outlier guard flag
+  source_rows: Array<{ table: string; pk: string | number }>
 }
 
 export interface Decision {

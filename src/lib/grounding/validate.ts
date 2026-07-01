@@ -35,7 +35,11 @@ type Extended = Fact & {
   data_health?: number | null
   unstable?: boolean | null
   computed_at?: string
+  computedAt?: string
 }
+
+const getComputedAt = (f: Extended): string | undefined =>
+  f.computed_at ?? f.computedAt
 
 export function checkStrict(
   usedFacts: Extended[],
@@ -57,8 +61,9 @@ export function checkStrict(
       healthN += 1
       if (f.data_health < opts.min_data_health) nLow += 1
     }
-    if (f.computed_at) {
-      const age = (now - new Date(f.computed_at).getTime()) / 3.6e6
+    const cAt = getComputedAt(f)
+    if (cAt) {
+      const age = (now - new Date(cAt).getTime()) / 3.6e6
       if (age > opts.max_age_hours) nStale += 1
     }
     if (f.unstable) nUnstable += 1

@@ -43,3 +43,11 @@ __pycache__/
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# editor/agent state
+.serena/
+.cursor/
+${HOME}/
+
+# ml
+ml/__pycache__/

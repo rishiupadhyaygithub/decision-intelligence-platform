@@ -16,7 +16,9 @@ export const FactRow = z.object({
   value: z.number().finite().nullable(),
   value_text: z.string().nullable().optional(),
   time_window: z.string().nullable().optional(),
-  method: z.enum(["sql", "ml", "rule"]).transform((m) => `${m}` as const),
+  method: z.string().regex(/^(sql|ml|rule)(:[a-z0-9_-]+)?$/, {
+    message: 'method must be sql|ml|rule optionally with :suffix (e.g. sql:zscore)',
+  }),
   sample_n: z.number().int().nonnegative().nullable().optional(),
   confidence: z.number().min(0).max(1).nullable().optional(),
   data_health: z.number().min(0).max(1).nullable().optional(),

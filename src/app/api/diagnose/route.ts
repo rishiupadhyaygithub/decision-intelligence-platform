@@ -16,11 +16,20 @@ const Body = z.object({
 })
 
 type VelocityRow = { sku_id: string; region: string; week: string; units: number | string; revenue?: number | string }
-type CompPressureRow = { category: string; week?: string; urgent_signals: number | string; total_signals: number | string }
+type CompSignalRow = { detected_at: string; urgent: boolean | null }
 type InvRow = { sku_id: string; region: string; snapshot_date: string; cover_ratio: number | string }
 
 function toWeek(iso: string): string {
   return iso.slice(0, 10)
+}
+
+// Snap ISO date to the Monday of its week — matches v_sku_velocity.week format
+// so competitor pressure bucket aligns with velocity + inventory series.
+function weekStart(iso: string): string {
+  const d = new Date(iso)
+  const day = (d.getUTCDay() + 6) % 7
+  d.setUTCDate(d.getUTCDate() - day)
+  return d.toISOString().slice(0, 10)
 }
 
 export async function POST(request: Request) {
@@ -41,7 +50,9 @@ export async function POST(request: Request) {
   const [velRes, invRes, compRes, factRes] = await Promise.all([
     supabase.from('v_sku_velocity').select('*').eq('sku_id', sku).eq('region', region),
     supabase.from('v_inventory_risk').select('*').eq('sku_id', sku).eq('region', region),
-    supabase.from('v_competitor_pressure').select('*'),
+    // v_competitor_pressure is a category rollup with no week column, so we go
+    // to the raw table and bucket by ISO-week Monday to align with velocity.
+    supabase.from('competitor_signal').select('detected_at, urgent'),
     supabase
       .from('facts')
       .select('id, metric, dims')
@@ -54,26 +65,30 @@ export async function POST(request: Request) {
 
   const velocity = (velRes.data ?? []) as VelocityRow[]
   const inventory = (invRes.data ?? []) as InvRow[]
-  const competitor = (compRes.data ?? []) as CompPressureRow[]
+  const compSignals = (compRes.data ?? []) as CompSignalRow[]
 
   const targetSeries: Series[] = velocity
     .map((r) => ({
-      week: toWeek(r.week),
+      week: weekStart(r.week),
       value: Number(target === 'revenue' ? (r.revenue ?? r.units) : r.units),
     }))
     .filter((s) => Number.isFinite(s.value))
 
   const invSeries: Series[] = inventory
-    .map((r) => ({ week: toWeek(r.snapshot_date), value: Number(r.cover_ratio) }))
+    .map((r) => ({ week: weekStart(r.snapshot_date), value: Number(r.cover_ratio) }))
     .filter((s) => Number.isFinite(s.value))
 
-  const compSeries: Series[] = competitor
-    .filter((r) => r.week)
-    .map((r) => {
-      const total = Number(r.total_signals) || 0
-      const urgent = Number(r.urgent_signals) || 0
-      return { week: toWeek(r.week!), value: total ? (urgent / total) * 100 : 0 }
-    })
+  const compByWeek: Record<string, { total: number; urgent: number }> = {}
+  for (const s of compSignals) {
+    if (!s.detected_at) continue
+    const wk = weekStart(s.detected_at)
+    const bucket = (compByWeek[wk] ??= { total: 0, urgent: 0 })
+    bucket.total += 1
+    if (s.urgent) bucket.urgent += 1
+  }
+  const compSeries: Series[] = Object.entries(compByWeek)
+    .map(([week, b]) => ({ week, value: b.total ? (b.urgent / b.total) * 100 : 0 }))
+    .sort((a, b) => a.week.localeCompare(b.week))
 
   const findFact = (metric: string, dims: Record<string, unknown>): string[] => {
     return (factRes.data ?? [])
