@@ -7,15 +7,13 @@ Run:  DATABASE_URL=postgres://... python ml/forecast.py
 import pandas as pd
 from statsmodels.tsa.holtwinters import ExponentialSmoothing
 
+from _db import connect
 import json
-import os
-import sys
-from common import read_supabase
+
 
 def main():
-    df = read_supabase("v_region_demand", order_by_col="region,month")
-    if not df.empty:
-        df = df.sort_values("month")
+    conn = connect()
+    df = pd.read_sql("select region, month, units from v_region_demand order by month", conn)
     rows = []
     for region, g in df.groupby("region"):
         s = g.set_index("month")["units"].astype(float)
@@ -43,7 +41,8 @@ def main():
     if rows:
         print(json.dumps(rows))
     else:
-        print("[]")
+        print("no series with enough history")
+
 
 if __name__ == "__main__":
     main()

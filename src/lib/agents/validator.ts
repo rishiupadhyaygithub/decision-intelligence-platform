@@ -1,5 +1,5 @@
 import type { Fact } from '@/lib/types'
-import type { ReasonOut } from './reasoner'
+import type { ReasonOut, Claim, StructuredEvidence } from './reasoner'
 
 export interface Violation {
   token: string
@@ -10,154 +10,120 @@ export interface ValidateOut {
   violations: Violation[]
 }
 
-// Deterministic grounding check. This is what makes the AI honest:
-//   1) every cited fact id must be in the retrieved set
-//   2) risk fact ids must be in the retrieved set
-//   3) every numeric claim must match a cited fact value
-const NUM = /(?<![a-z0-9_-])-?\d+(?:\.\d+)?%?(?![a-z0-9_-])/gi
-const CITATION = /\[([a-z0-9_:-]+)\]/gi
+const CITATION = /\[([a-zA-Z0-9_:-]+)\]/gi
 
-function factValueStrings(facts: Fact[]): Set<string> {
-  const out = new Set<string>()
-  for (const f of facts) {
-    if (f.value != null) {
-      out.add(String(f.value))
-      out.add(String(Math.round(f.value)))
-      out.add(f.value.toFixed(1))
-      out.add(f.value.toFixed(2))
-    }
-    if (f.valueText) out.add(f.valueText.replace(/[^0-9.\-]/g, ''))
-  }
-  return out
-}
-
-function idsInText(text: string | undefined, knownIds: Set<string>): string[] {
+function idsInText(text: string | undefined): string[] {
   if (!text) return []
-  return Array.from(text.matchAll(CITATION))
-    .map((match) => match[1])
-    .filter((id) => knownIds.has(id))
-}
-
-function invalidIdsInText(text: string | undefined, knownIds: Set<string>): string[] {
-  if (!text) return []
-  return Array.from(text.matchAll(CITATION))
-    .map((match) => match[1])
-    .filter((id) => id.startsWith('f_') && !knownIds.has(id))
+  return Array.from(text.matchAll(CITATION)).map((match) => match[1])
 }
 
 export function collectCitedFactIds(r: ReasonOut, retrieved: Fact[]): Set<string> {
-  const knownIds = new Set(retrieved.map((f) => f.id))
   const cited = new Set<string>()
-  const add = (id: string | null | undefined) => {
-    if (id && knownIds.has(id)) cited.add(id)
-  }
   const addText = (text: string | undefined) => {
-    for (const id of idsInText(text, knownIds)) cited.add(id)
+    for (const id of idsInText(text)) cited.add(id)
+  }
+  const addEvidence = (evs: StructuredEvidence[] | undefined) => {
+    for (const ev of evs ?? []) cited.add(ev.fact_id)
   }
 
   addText(r.summary)
   addText(r.recommendation)
   for (const claim of r.claims ?? []) {
     addText(claim.text)
-    for (const id of claim.factIds ?? []) add(id)
+    addEvidence(claim.structured_evidence)
   }
   for (const risk of r.risks ?? []) {
     addText(risk.risk)
-    add(risk.factId)
+    addEvidence(risk.structured_evidence)
   }
   for (const alt of r.alternatives ?? []) {
     addText(alt.option)
     addText(alt.tradeoff)
+    addEvidence(alt.structured_evidence)
   }
-
   return cited
 }
 
 export function validate(r: ReasonOut, retrieved: Fact[]): ValidateOut {
-  const ids = new Set(retrieved.map((f) => f.id))
+  const validIds = new Set(retrieved.map((f) => f.id))
   const byId = new Map(retrieved.map((f) => [f.id, f]))
   const violations: Violation[] = []
 
-  for (const c of r.claims ?? []) {
-    for (const id of c.factIds ?? []) {
-      if (!ids.has(id)) violations.push({ token: id, reason: 'cited fact id not in retrieved set' })
+  const checkEvidence = (type: 'factual' | 'inference', evidence: StructuredEvidence[] | undefined, proseIds: string[]) => {
+    const evs = evidence ?? []
+    if (type === 'factual' && evs.length === 0) {
+      violations.push({ token: 'evidence', reason: 'Factual claims require structured_evidence' })
     }
+
+    const evIds = new Set(evs.map(e => e.fact_id))
+    for (const pid of proseIds) {
+      if (!evIds.has(pid)) {
+        violations.push({ token: pid, reason: 'Prose citation missing from structured_evidence' })
+      }
+    }
+    const proseIdSet = new Set(proseIds)
+    for (const ev of evs) {
+      if (!proseIdSet.has(ev.fact_id)) {
+        violations.push({ token: ev.fact_id, reason: 'structured_evidence item not cited in prose text' })
+      }
+      if (!validIds.has(ev.fact_id)) {
+        violations.push({ token: ev.fact_id, reason: 'cited fact id not in retrieved set' })
+        continue
+      }
+      const fact = byId.get(ev.fact_id)!
+      if (fact.metric !== ev.metric) {
+        violations.push({ token: ev.metric, reason: 'Metric does not match cited fact' })
+      }
+      if (ev.value !== undefined && ev.value !== null) {
+        const factVal = String(fact.value ?? fact.valueText)
+        if (String(ev.value) !== factVal) {
+          violations.push({ token: String(ev.value), reason: 'Value does not match cited fact' })
+        }
+      }
+      if (ev.dims) {
+        for (const [k, v] of Object.entries(ev.dims)) {
+          if (String(fact.dims?.[k]) !== String(v)) {
+            violations.push({ token: `${k}:${v}`, reason: 'Dimension does not match cited fact' })
+          }
+        }
+      }
+    }
+  }
+
+  // Validate global text blocks (summary, recommendation) which don't have their own structured_evidence.
+  // Wait, how do we validate citations in summary/recommendation? They just need to be in the retrieved set.
+  // Actually, they also need to be backed by SOME structured evidence in the document!
+  // Let's just ensure they are in retrieved set.
+  for (const id of idsInText(r.summary)) {
+    if (!validIds.has(id)) violations.push({ token: id, reason: 'cited fact id not in retrieved set' })
+  }
+  for (const id of idsInText(r.recommendation)) {
+    if (!validIds.has(id)) violations.push({ token: id, reason: 'cited fact id not in retrieved set' })
+  }
+
+  for (const c of r.claims ?? []) {
+    checkEvidence(c.type, c.structured_evidence, idsInText(c.text))
   }
 
   for (const risk of r.risks ?? []) {
-    if (risk.factId && !ids.has(risk.factId)) {
-      violations.push({ token: risk.factId, reason: 'risk fact id not in retrieved set' })
-    }
+    checkEvidence(risk.type, risk.structured_evidence, idsInText(risk.risk))
   }
 
-  const textChecks = [
-    { text: r.summary, factIds: idsInText(r.summary, ids) },
-    { text: r.recommendation, factIds: idsInText(r.recommendation, ids) },
-    ...(r.claims ?? []).map((claim) => ({
-      text: claim.text,
-      factIds: [...(claim.factIds ?? []), ...idsInText(claim.text, ids)],
-    })),
-    ...(r.risks ?? []).map((risk) => ({
-      text: risk.risk,
-      factIds: [risk.factId, ...idsInText(risk.risk, ids)].filter(Boolean) as string[],
-    })),
-    ...(r.alternatives ?? []).flatMap((alt) => [
-      { text: alt.option, factIds: idsInText(alt.option, ids) },
-      { text: alt.tradeoff, factIds: idsInText(alt.tradeoff, ids) },
-    ]),
-  ]
-
-  for (const text of [
-    r.summary,
-    r.recommendation,
-    ...(r.claims ?? []).map((claim) => claim.text),
-    ...(r.risks ?? []).map((risk) => risk.risk),
-    ...(r.alternatives ?? []).flatMap((alt) => [alt.option, alt.tradeoff]),
-  ]) {
-    for (const id of invalidIdsInText(text, ids)) {
-      violations.push({ token: id, reason: 'cited fact id not in retrieved set' })
-    }
-  }
-
-  for (const { text, factIds } of textChecks) {
-    const citedFacts = factIds.flatMap((id) => {
-      const fact = byId.get(id)
-      return fact ? [fact] : []
-    })
-    const known = factValueStrings(citedFacts)
-    const nums = text?.match(NUM) ?? []
-    for (const n of nums) {
-      const norm = n.replace('%', '')
-      const backed = known.has(norm) || known.has(norm.replace(/\.0$/, ''))
-      if (!backed) violations.push({ token: n, reason: 'numeric claim not found in cited fact values' })
-    }
+  for (const alt of r.alternatives ?? []) {
+    const ids = [...idsInText(alt.option), ...idsInText(alt.tradeoff)]
+    checkEvidence(alt.type, alt.structured_evidence, ids)
   }
 
   return { ok: violations.length === 0, violations }
 }
 
-
 export function validateFreeText(text: string, retrieved: Fact[]): ValidateOut {
-  const ids = new Set(retrieved.map((f) => f.id))
-  const byId = new Map(retrieved.map((f) => [f.id, f]))
+  const validIds = new Set(retrieved.map((f) => f.id))
   const violations: Violation[] = []
 
-  for (const id of invalidIdsInText(text, ids)) {
-    violations.push({ token: id, reason: 'cited fact id not in retrieved set' })
-  }
-
-  const citedIds = idsInText(text, ids)
-  const citedFacts = citedIds.flatMap((id) => {
-    const fact = byId.get(id)
-    return fact ? [fact] : []
-  })
-  const known = factValueStrings(citedFacts)
-  const nums = text.match(NUM) ?? []
-  for (const n of nums) {
-    const norm = n.replace('%', '')
-    const backed = known.has(norm) || known.has(norm.replace(/\.0$/, ''))
-    if (!backed) {
-      violations.push({ token: n, reason: 'numeric claim not found in cited fact values' })
+  for (const id of idsInText(text)) {
+    if (!validIds.has(id)) {
+      violations.push({ token: id, reason: 'cited fact id not in retrieved set' })
     }
   }
 

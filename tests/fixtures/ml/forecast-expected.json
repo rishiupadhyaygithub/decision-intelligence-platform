@@ -1,0 +1,46 @@
+[
+  {
+    "metric": "demand_forecast_next",
+    "dims": {
+      "region": "Delhi NCR"
+    },
+    "value": 14635.44,
+    "window": "next_month",
+    "method": "ml:holtwinters",
+    "sample_n": 19,
+    "confidence": 0.62
+  },
+  {
+    "metric": "demand_forecast_next",
+    "dims": {
+      "region": "North"
+    },
+    "value": 24254.25,
+    "window": "next_month",
+    "method": "ml:holtwinters",
+    "sample_n": 19,
+    "confidence": 0.62
+  },
+  {
+    "metric": "demand_forecast_next",
+    "dims": {
+      "region": "South"
+    },
+    "value": 24464.29,
+    "window": "next_month",
+    "method": "ml:holtwinters",
+    "sample_n": 19,
+    "confidence": 0.66
+  },
+  {
+    "metric": "demand_forecast_next",
+    "dims": {
+      "region": "West"
+    },
+    "value": 35824.62,
+    "window": "next_month",
+    "method": "ml:holtwinters",
+    "sample_n": 19,
+    "confidence": 0.64
+  }
+]

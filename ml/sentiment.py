@@ -5,23 +5,25 @@ Run:  DATABASE_URL=postgres://... python ml/sentiment.py
 """
 import pandas as pd
 
-from _db import connect, upsert_facts
+import json
+import os
+import sys
+from common import read_supabase
 
 NEG = ["drop", "down", "decline", "loss", "pressure", "risk", "flash sale",
        "stockout", "squeeze", "war", "preempt"]
 POS = ["up", "growth", "spike", "win", "tailwind", "first-mover", "viral",
        "opportunity", "gain"]
 
-
 def score(text):
     t = text.lower()
     s = sum(w in t for w in POS) - sum(w in t for w in NEG)
     return max(-1.0, min(1.0, s / 3.0))
 
-
 def main():
-    conn = connect()
-    df = pd.read_sql("select category, body from competitor_signal", conn)
+    df = read_supabase("competitor_signal", order_by_col="id")
+    if df.empty:
+        df = pd.DataFrame(columns=["category", "body"])
     rows = []
     for cat, g in df.groupby("category"):
         vals = [score(b) for b in g["body"]]
@@ -36,8 +38,10 @@ def main():
             "confidence": 0.6,
             "value_text": "negative" if avg < 0 else "positive",
         })
-    print("upserted", upsert_facts(conn, rows), "sentiment facts")
-
+    if rows:
+        print(json.dumps(rows))
+    else:
+        print("[]")
 
 if __name__ == "__main__":
     main()

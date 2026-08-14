@@ -8,15 +8,14 @@ import numpy as np
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
 
+from _db import connect
 import json
-import os
-import sys
-from common import read_supabase
+
 
 def main():
-    df = read_supabase("v_sku_velocity", order_by_col="sku_id,region,week")
-    if not df.empty:
-        df = df.sort_values("week")
+    conn = connect()
+    df = pd.read_sql("select sku_id, region, week, units from v_sku_velocity order by week", conn)
+
     feats, labels = [], []
     for _, g in df.groupby(["sku_id", "region"]):
         u = g.sort_values("week")["units"].astype(float).values
@@ -52,10 +51,8 @@ def main():
             "sample_n": len(u),
             "confidence": 0.7,
         })
-    if rows:
-        print(json.dumps(rows))
-    else:
-        print("[]")
+    print(json.dumps(rows))
+
 
 if __name__ == "__main__":
     main()

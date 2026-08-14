@@ -7,8 +7,8 @@ const genAI = apiKey ? new GoogleGenerativeAI(apiKey) : null
 
 export type Tier = 'fast' | 'smart'
 const MODELS: Record<Tier, string> = {
-  fast: 'gemini-2.0-flash-lite', // cheap: retrieval, skeptic
-  smart: 'gemini-2.0-flash',     // final reasoning
+  fast: 'gemini-3.5-flash-lite',
+  smart: 'gemini-3.5-flash',
 }
 
 export interface LlmOpts {
@@ -31,7 +31,8 @@ export async function llm(prompt: string, opts: LlmOpts = {}): Promise<string | 
   try {
     const r = await model.generateContent(prompt)
     return r.response.text()
-  } catch {
+  } catch (e) {
+    console.error("Gemini failed:", e)
     return null
   }
 }

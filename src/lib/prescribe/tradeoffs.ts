@@ -20,8 +20,7 @@ interface LlmAlt {
   action?: string
   upside?: string
   downside?: string
-  factId?: string
-  fact_id?: string
+  structured_evidence?: { fact_id: string }[]
   expected_impact?: string | number
 }
 
@@ -37,9 +36,10 @@ const pct = (v: unknown): number | null => {
   return Number.isFinite(n) ? Number(n.toFixed(1)) : null
 }
 
-const factIdsFor = (text: string, facts: Fact[]): string[] => {
+const factIdsFor = (text: string, facts: Fact[], evs?: { fact_id: string }[]): string[] => {
   const ids = new Set<string>()
   for (const f of facts) if (text.includes(f.id)) ids.add(f.id)
+  for (const ev of evs ?? []) if (facts.some(f => f.id === ev.fact_id)) ids.add(ev.fact_id)
   return Array.from(ids)
 }
 
@@ -80,7 +80,7 @@ export function shapeTradeoffs(
         upside: a.upside ?? '',
         downside: a.downside ?? '',
         expected_impact_pct: pct(a.expected_impact),
-        cited_fact_ids: factIdsFor(`${text} ${a.factId ?? a.fact_id ?? ''}`, usedFacts),
+        cited_fact_ids: factIdsFor(`${text} ${a.upside ?? ''} ${a.downside ?? ''}`, usedFacts, a.structured_evidence),
       })
     }
   }

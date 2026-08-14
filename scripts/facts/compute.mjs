@@ -1,7 +1,6 @@
 // scripts/facts/compute.mjs
 import { createHash } from 'node:crypto'
 import { createClient } from '@supabase/supabase-js'
-import { computeMlFacts } from './ml.mjs'
 import { flagOutliers } from './quality.mjs'
 import { scoreHealth, healthSummary } from './health.mjs'
 
@@ -27,10 +26,28 @@ const std = (a) => {
 }
 const conf = (n) => Math.min(0.95, Math.round((1 - 1 / Math.sqrt(Math.max(n, 1))) * 100) / 100)
 
-async function readView(sb, name) {
-  const { data, error } = await sb.from(name).select('*')
-  if (error) throw new Error(`${name}: ${error.message}`)
-  return data ?? []
+async function readView(sb, name, orderByCols = []) {
+  const allData = []
+  let offset = 0
+  const limit = 1000
+  while (true) {
+    let query = sb.from(name).select('*')
+    for (const col of orderByCols) {
+      // Split asc/desc if provided, e.g. "month.desc"
+      const [c, dir] = col.split('.')
+      query = query.order(c, { ascending: dir !== 'desc' })
+    }
+    // Fallback order by all columns if none provided, to ensure some determinism
+    // but caller should really provide unique keys.
+    
+    const { data, error } = await query.range(offset, offset + limit - 1)
+    if (error) throw new Error(`${name}: ${error.message}`)
+    if (!data || data.length === 0) break
+    allData.push(...data)
+    if (data.length < limit) break
+    offset += limit
+  }
+  return allData
 }
 
 export async function computeFacts(sb) {
@@ -65,94 +82,90 @@ export async function computeFacts(sb) {
     })
   }
 
-  const rev = await readView(sb, 'v_revenue_by_region_daily')
-  const byRegion = {}
-  for (const r of rev) (byRegion[r.region] ??= []).push(r)
-  for (const [region, rows] of Object.entries(byRegion)) {
-    rows.sort((a, b) => new Date(a.sale_date) - new Date(b.sale_date))
-    const series = rows.map((r) => Number(r.revenue))
-    if (series.length < 6) continue
-    const recent = series.slice(-4)
-    const base = series.slice(0, -4)
-    const delta = mean(base) ? ((mean(recent) - mean(base)) / mean(base)) * 100 : 0
-    const z = std(base) ? (mean(recent) - mean(base)) / std(base) : 0
-    push('revenue_trend_recent', { region }, delta, {
-      window: 'recent_vs_base',
-      method: 'sql:pct',
-      n: series.length,
+  // 1. Revenue
+  for (const r of await readView(sb, 'v_fact_revenue_trend', ['region'])) {
+    push('revenue_trend_recent', { region: r.region }, r.delta_pct, {
+      window: 'recent_vs_base', method: 'sql:pct', n: r.total_rows,
     })
-    push('revenue_anomaly_z', { region }, z, { method: 'sql:zscore', n: series.length })
+    push('revenue_anomaly_z', { region: r.region }, r.z_score, { 
+      method: 'sql:zscore', n: r.total_rows 
+    })
   }
 
-  for (const m of await readView(sb, 'v_margin')) {
+  // 2. Margin
+  for (const m of await readView(sb, 'v_margin', ['sku_id'])) {
     push('margin_pct', { sku: m.sku_id }, Number(m.margin_pct), {
-      method: 'sql',
-      n: 1,
-      confidence: 0.99,
+      method: 'sql', n: 1, confidence: 0.99,
     })
   }
 
-  const vel = await readView(sb, 'v_sku_velocity')
-  const byKey = {}
-  for (const v of vel) {
-    const k = `${v.sku_id}\0${v.region}`
-    ;(byKey[k] ??= []).push(v)
-  }
-  for (const [k, rows] of Object.entries(byKey)) {
-    const sep = k.indexOf('\0')
-    const sku = k.slice(0, sep)
-    const region = k.slice(sep + 1)
-    rows.sort((a, b) => new Date(a.week) - new Date(b.week))
-    const u = rows.map((r) => Number(r.units))
-    if (u.length < 4) continue
-    const last = u[u.length - 1]
-    const prior = u.slice(0, -1)
-    const delta = mean(prior) ? ((last - mean(prior)) / mean(prior)) * 100 : 0
-    push('sku_velocity_delta', { sku, region }, delta, {
-      window: 'week',
-      method: 'sql:pct',
-      n: u.length,
+  // 3. SKU Velocity
+  for (const v of await readView(sb, 'v_fact_sku_velocity', ['sku_id', 'region'])) {
+    push('sku_velocity_delta', { sku: v.sku_id, region: v.region }, v.delta_pct, {
+      window: 'week', method: 'sql:pct', n: v.total_rows,
     })
   }
 
-  const inv = await readView(sb, 'v_inventory_risk')
-  const latestInv = {}
-  for (const r of inv) {
-    const k = `${r.sku_id}\0${r.region}`
-    if (!latestInv[k] || new Date(r.snapshot_date) > new Date(latestInv[k].snapshot_date))
-      latestInv[k] = r
-  }
-  for (const [k, r] of Object.entries(latestInv)) {
-    const sep = k.indexOf('\0')
-    const sku = k.slice(0, sep)
-    const region = k.slice(sep + 1)
-    push('inventory_cover_ratio', { sku, region }, Number(r.cover_ratio), {
-      method: 'sql',
-      n: 1,
-      confidence: 0.9,
-      valueText: r.below_reorder ? 'below_reorder' : 'ok',
+  // 4. Inventory
+  for (const r of await readView(sb, 'v_fact_inventory', ['sku_id', 'region'])) {
+    push('inventory_cover_ratio', { sku: r.sku_id, region: r.region }, Number(r.cover_ratio), {
+      window: 'latest', method: 'sql', n: 1, valueText: r.below_reorder ? 'below_reorder' : 'ok',
     })
   }
 
-  for (const c of await readView(sb, 'v_competitor_pressure')) {
-    const ratio = c.total_signals ? (c.urgent_signals / c.total_signals) * 100 : 0
-    push('competitor_pressure_pct', { category: c.category }, ratio, {
-      method: 'rule',
-      n: Number(c.total_signals),
+  // 5. Competitor
+  for (const c of await readView(sb, 'v_fact_competitor', ['category'])) {
+    push('competitor_pressure_pct', { category: c.category }, Number(c.pressure_pct), {
+      method: 'sql', n: c.total_signals,
     })
   }
 
-  // Merge live ML facts (Holt demand forecast, logreg churn, rule sentiment)
-  // into the same pass so they survive the stale-cleanup below.
-  const mlFacts = await computeMlFacts(sb)
-  for (const f of mlFacts) {
+  const pyFacts = []
+  try {
+    const { exec } = await import('node:child_process')
+    const { promisify } = await import('node:util')
+    const execAsync = promisify(exec)
+    
+    // Pass the Supabase URL and Key dynamically to python
+    const env = { 
+      ...process.env, 
+      NEXT_PUBLIC_SUPABASE_URL: url,
+      SUPABASE_SERVICE_ROLE_KEY: key
+    }
+    
+    console.log("Running Python ML (forecast)...")
+    const { stdout: fcOut } = await execAsync('python3 ml/forecast.py', { env })
+    const fcFacts = JSON.parse(fcOut || '[]')
+    
+    console.log("Running Python ML (churn)...")
+    const { stdout: chOut } = await execAsync('python3 ml/churn.py', { env })
+    const chFacts = JSON.parse(chOut || '[]')
+    
+    console.log("Running Python ML (sentiment)...")
+    const { stdout: seOut } = await execAsync('python3 ml/sentiment.py', { env })
+    const seFacts = JSON.parse(seOut || '[]')
+    
+    pyFacts.push(...fcFacts, ...chFacts, ...seFacts)
+  } catch (e) {
+    console.error(`Error running Python ML: ${e.message}`)
+    throw new Error(`Python ML failed: ${e.message}`)
+  }
+
+  // Generate deterministic fact IDs for Python ML facts to prevent conflicts
+  // and match the DB schema shape
+  for (const f of pyFacts) {
+    f.id = factId(f.metric, f.dims)
+    f.computed_at = now
     f.formula_id = f.formula_id ?? f.metric
     f.source_rows = f.source_rows ?? []
     f.unstable = f.unstable ?? false
     facts.push(f)
   }
 
-  if (!facts.length) throw new Error('No facts computed — is the seed loaded?')
+  if (!facts.length) {
+    console.error('No facts computed for this batch. Aborting publication to preserve last known-good state (Missing Data).')
+    process.exit(1)
+  }
 
   // W1 — quality + health pass before persistence.
   const qual = flagOutliers(facts)
@@ -167,14 +180,15 @@ export async function computeFacts(sb) {
   const { data: existing, error: listErr } = await sb.from('facts').select('id')
   if (listErr) throw new Error(`facts list: ${listErr.message}`)
 
-  const stale = (existing ?? []).map((r) => r.id).filter((id) => !newIds.has(id))
-  if (stale.length) {
-    const { error: delErr } = await sb.from('facts').delete().in('id', stale)
-    if (delErr) throw new Error(`facts cleanup: ${delErr.message}`)
-  }
-
-  const { error } = await sb.from('facts').upsert(facts, { onConflict: 'id' })
-  if (error) throw new Error(`facts upsert: ${error.message}`)
+  // PHASE 1A: Do not delete old facts just because their source is temporarily empty.
+  // They will naturally decay out of LLM grounding via data_health scoring.
+  const stale = [] 
+  
+  const { error } = await sb.rpc('publish_facts', {
+    new_facts: facts,
+    stale_ids: stale
+  })
+  if (error) throw new Error(`facts publish_facts rpc: ${error.message}`)
 
   return facts.length
 }

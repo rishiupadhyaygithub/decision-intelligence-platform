@@ -49,7 +49,7 @@ export async function POST(request: Request) {
     )
   }
 
-  let model = 'gemini-2.0-flash'
+  let model = 'gemini-3.5-flash'
   let r = await reason(decisionText, facts)
   if (!r) {
     r = fallbackReason(facts)
@@ -122,13 +122,70 @@ export async function POST(request: Request) {
     }
   }
 
+  const decisionId = crypto.randomUUID()
+  const snapshots: any[] = []
+  
+  let claimIndex = 0
+  for (const c of r.claims ?? []) {
+    for (const ev of c.structured_evidence ?? []) {
+      const fact = usedFacts.find(f => f.id === ev.fact_id)
+      if (fact) snapshots.push({ claim_index: claimIndex, claim_type: 'claim', fact_id: fact.id, fact_snapshot: fact })
+    }
+    claimIndex++
+  }
+
+  let riskIndex = 0
+  for (const c of r.risks ?? []) {
+    for (const ev of c.structured_evidence ?? []) {
+      const fact = usedFacts.find(f => f.id === ev.fact_id)
+      if (fact) snapshots.push({ claim_index: riskIndex, claim_type: 'risk', fact_id: fact.id, fact_snapshot: fact })
+    }
+    riskIndex++
+  }
+
+  let altIndex = 0
+  for (const c of r.alternatives ?? []) {
+    for (const ev of c.structured_evidence ?? []) {
+      const fact = usedFacts.find(f => f.id === ev.fact_id)
+      if (fact) snapshots.push({ claim_index: altIndex, claim_type: 'alternative', fact_id: fact.id, fact_snapshot: fact })
+    }
+    altIndex++
+  }
+
+  const decisionObj = {
+    id: decisionId,
+    title,
+    problem: proposal,
+    enrichment: {
+      summary: r.summary,
+      recommendation: r.recommendation,
+      confidence: confAvg,
+      dataHealth: dataHealth,
+      riskLevel: r.risks?.[0]?.severity ?? 'low',
+      model,
+      grounded: grounded && strict.passed
+    }
+  }
+
+  const { data: saveResult, error: saveError } = await supabase.rpc('save_decision_lineage', {
+    p_decision: decisionObj,
+    p_snapshots: snapshots
+  })
+
+  if (saveError) {
+    console.error('Failed to save decision lineage:', saveError)
+  }
+
   return NextResponse.json({
+    id: decisionId,
+    saved: !!saveResult,
+    saved_snapshots: saveResult?.snapshots ?? 0,
     analysis: {
       summary: r.summary,
       top_risks: (r.risks ?? []).map((x) => ({
         risk: x.risk,
         severity: x.severity,
-        fact_id: x.factId,
+        fact_id: x.structured_evidence?.[0]?.fact_id ?? null,
       })),
       alternatives: r.alternatives ?? [],
       recommendation: r.recommendation,

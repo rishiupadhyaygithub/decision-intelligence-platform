@@ -43,21 +43,42 @@ function toFact(r: FactRow): Fact {
 // until then we rank facts by term overlap between the decision text and metric+dims.
 export async function retrieveFacts(decisionText: string, limit = 12): Promise<Fact[]> {
   const sb = createAdminClient()
-  const { data, error } = await sb
+  
+  const twoWeeksAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString()
+  const safeTerms = Array.from(new Set((decisionText.toLowerCase().match(/[a-z0-9-]{3,}/g) ?? [])))
+
+  let query = sb
     .from('facts')
     .select('*')
-    .order('computed_at', { ascending: false })
-    .limit(200)
+    .gte('computed_at', twoWeeksAgo)
+    .gte('data_health', 0.5)
+    .is('unstable', false)
+
+  if (safeTerms.length > 0) {
+    const orClauses = safeTerms.map(t => `metric.ilike.%${t}%,dims.fts.${t}`).join(',')
+    query = query.or(orClauses)
+  }
+
+  const { data, error } = await query
+
   if (error || !data) return []
 
-  const terms = Array.from(new Set((decisionText.toLowerCase().match(/[a-z0-9-]{3,}/g) ?? [])))
+  // Rank by term overlap in Node for fine-grained ranking, but now the pool is 
+  // safely filtered to only fresh, healthy, relevant facts BEFORE any limit.
   const scored = (data as FactRow[])
     .map((r) => {
       const hay = (r.metric + ' ' + JSON.stringify(r.dims)).toLowerCase()
-      const score = terms.reduce((s, t) => s + (hay.includes(t) ? 1 : 0), 0)
+      const score = safeTerms.reduce((s, t) => s + (hay.includes(t) ? 1 : 0), 0)
       return { r, score }
     })
     .sort((a, b) => b.score - a.score)
+    // Secondary sort by freshness
+    .sort((a, b) => {
+      if (a.score === b.score) {
+        return new Date(b.r.computed_at).getTime() - new Date(a.r.computed_at).getTime()
+      }
+      return 0
+    })
 
   const matched = scored.filter((s) => s.score > 0).slice(0, limit)
   if (!matched.length) return []
