@@ -1,7 +1,7 @@
-import { createAdminClient } from './src/lib/supabase-admin.ts'
-import { retrieveFacts } from './src/lib/agents/retriever.ts'
-import { reason } from './src/lib/agents/reasoner.ts'
-import { validate } from './src/lib/agents/validator.ts'
+import { createAdminClient } from '../../src/lib/supabase-admin.ts'
+import { retrieveFacts } from '../../src/lib/agents/retriever.ts'
+import { reason } from '../../src/lib/agents/reasoner.ts'
+import { validate } from '../../src/lib/agents/validator.ts'
 
 // Phase 4.5 E2E Audit Script
 async function runE2EAudit() {

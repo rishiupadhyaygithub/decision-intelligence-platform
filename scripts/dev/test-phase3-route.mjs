@@ -1,4 +1,4 @@
-import { POST } from './src/app/api/analyze-decision/route.ts'
+import { POST } from '../../src/app/api/analyze-decision/route.ts'
 
 async function testEndpoint() {
   const req = new Request('http://localhost:3000/api/analyze-decision', {

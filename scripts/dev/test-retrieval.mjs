@@ -1,5 +1,5 @@
-import { createAdminClient } from './src/lib/supabase-admin.ts'
-import { retrieveFacts } from './src/lib/agents/retriever.ts'
+import { createAdminClient } from '../../src/lib/supabase-admin.ts'
+import { retrieveFacts } from '../../src/lib/agents/retriever.ts'
 
 async function setupTestData() {
   const sb = createAdminClient()

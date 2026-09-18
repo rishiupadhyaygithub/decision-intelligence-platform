@@ -1,4 +1,4 @@
-import { validate } from './src/lib/agents/validator.ts'
+import { validate } from '../../src/lib/agents/validator.ts'
 
 const mockFacts = [
   { id: 'f_1', metric: 'sales', value: 100, dims: { region: 'North' } },

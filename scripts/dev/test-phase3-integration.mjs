@@ -1,7 +1,7 @@
-import { reason, fallbackReason } from './src/lib/agents/reasoner.ts'
-import { retrieveFacts } from './src/lib/agents/retriever.ts'
-import { validate } from './src/lib/agents/validator.ts'
-import { shapeTradeoffs } from './src/lib/prescribe/tradeoffs.ts'
+import { reason, fallbackReason } from '../../src/lib/agents/reasoner.ts'
+import { retrieveFacts } from '../../src/lib/agents/retriever.ts'
+import { validate } from '../../src/lib/agents/validator.ts'
+import { shapeTradeoffs } from '../../src/lib/prescribe/tradeoffs.ts'
 
 async function testIntegration() {
   const proposal = "The inventory in North is too high, let's cut SKUs by 50% immediately."
@@ -10,7 +10,7 @@ async function testIntegration() {
   console.log(`Retrieved ${facts.length} facts.`)
 
   console.log("Calling LLM reasoner...")
-  const { llm } = await import('./src/lib/agents/adapter.ts')
+  const { llm } = await import('../../src/lib/agents/adapter.ts')
   const raw = await llm("test", { tier: 'smart', json: true, system: 'Output {"test": 1}', maxTokens: 100 })
   console.log("Raw output:", raw)
   const r = await reason(proposal, facts)

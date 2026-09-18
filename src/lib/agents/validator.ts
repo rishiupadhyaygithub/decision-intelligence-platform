@@ -90,10 +90,9 @@ export function validate(r: ReasonOut, retrieved: Fact[]): ValidateOut {
     }
   }
 
-  // Validate global text blocks (summary, recommendation) which don't have their own structured_evidence.
-  // Wait, how do we validate citations in summary/recommendation? They just need to be in the retrieved set.
-  // Actually, they also need to be backed by SOME structured evidence in the document!
-  // Let's just ensure they are in retrieved set.
+  // summary/recommendation carry no structured_evidence of their own — they narrate
+  // claims that are individually validated below. So the bar here is membership only:
+  // every bracketed id must exist in the retrieved set.
   for (const id of idsInText(r.summary)) {
     if (!validIds.has(id)) violations.push({ token: id, reason: 'cited fact id not in retrieved set' })
   }

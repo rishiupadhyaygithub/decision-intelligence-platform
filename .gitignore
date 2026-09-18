@@ -47,7 +47,17 @@ next-env.d.ts
 # editor/agent state
 .serena/
 .cursor/
+.claude/
+.claude-flow/
 ${HOME}/
 
 # ml
 ml/__pycache__/
+
+# supabase CLI local state (project ref / org id — machine-local, not source)
+supabase/.temp/
+
+# local scratch output from scripts/dev/*
+*.local.csv
+v_region_demand.csv
+v_sku_velocity.csv

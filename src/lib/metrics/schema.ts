@@ -12,7 +12,7 @@ export const SourceRowRef = z.object({
 export const FactRow = z.object({
   id: z.string().min(1),
   metric: z.string().min(1),
-  dims: z.record(z.union([z.string(), z.number(), z.boolean()])).default({}),
+  dims: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).default({}),
   value: z.number().finite().nullable(),
   value_text: z.string().nullable().optional(),
   time_window: z.string().nullable().optional(),

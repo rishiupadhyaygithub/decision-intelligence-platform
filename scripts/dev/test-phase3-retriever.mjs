@@ -1,4 +1,4 @@
-import { retrieveFacts } from './src/lib/agents/retriever.ts'
+import { retrieveFacts } from '../../src/lib/agents/retriever.ts'
 
 async function testRetrieval() {
   const result1 = await retrieveFacts('North sales')

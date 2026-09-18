@@ -1,4 +1,4 @@
-import { createFactsClient, computeFacts } from './scripts/facts/compute.mjs'
+import { createFactsClient, computeFacts } from '../../scripts/facts/compute.mjs'
 
 async function run() {
   const sb = createFactsClient()

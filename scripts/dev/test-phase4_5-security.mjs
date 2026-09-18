@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
-import { createAdminClient } from './src/lib/supabase-admin.ts'
-import { retrieveFacts } from './src/lib/agents/retriever.ts'
+import { createAdminClient } from '../../src/lib/supabase-admin.ts'
+import { retrieveFacts } from '../../src/lib/agents/retriever.ts'
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
 const ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY

@@ -1,4 +1,4 @@
-import { createAdminClient } from './src/lib/supabase-admin.ts'
+import { createAdminClient } from '../../src/lib/supabase-admin.ts'
 const URL_ = process.env.NEXT_PUBLIC_SUPABASE_URL
 const TOKEN = process.env.SUPABASE_ACCESS_TOKEN
 const REF = URL_ ? new URL(URL_).hostname.split('.')[0] : null

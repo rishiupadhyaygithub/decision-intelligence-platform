@@ -5,6 +5,10 @@ export interface StructuredEvidence {
   fact_id: string
   metric: string
   value?: number | string | null
+  // Dimension slice the claim is about (e.g. { sku: 'SC-001', region: 'West' }).
+  // validator.ts checks these against the cited fact's dims — a claim that cites a
+  // real fact but the wrong slice is still a grounding violation.
+  dims?: Record<string, string | number | boolean>
 }
 
 export interface Claim {
@@ -33,7 +37,8 @@ function factsBlock(facts: Fact[]): string {
 export async function reason(decisionText: string, facts: Fact[]): Promise<ReasonOut | null> {
   const sys = `You are a grounded business strategy analyst.
 Every claim, risk, and alternative must be explicitly classified as "factual" or "inference".
-"factual" items MUST contain \`structured_evidence\` citing the exact fact_id, metric, and value from the provided FACTS.
+"factual" items MUST contain \`structured_evidence\` citing the exact fact_id, metric, value, and dims from the provided FACTS.
+Copy \`dims\` verbatim from the cited fact — do not reword, merge, or invent dimension keys or values.
 "inference" items are assumptions/projections and MUST still list the \`structured_evidence\` they are based on.
 Bracket citations like [fact_id] in the prose are for presentation only; the structured_evidence array is the authoritative source.
 Never invent fact IDs.
@@ -48,7 +53,7 @@ OUTPUT SCHEMA:
 {
   "summary": "...",
   "recommendation": "...",
-  "risks": [{"risk": "...", "severity": "high|medium|low", "type": "factual|inference", "structured_evidence": [{"fact_id": "...", "metric": "...", "value": 123}]}],
+  "risks": [{"risk": "...", "severity": "high|medium|low", "type": "factual|inference", "structured_evidence": [{"fact_id": "...", "metric": "...", "value": 123, "dims": {"sku": "SC-001", "region": "West"}}]}],
   "alternatives": [{"option": "...", "tradeoff": "...", "type": "factual|inference", "structured_evidence": []}],
   "claims": [{"text": "...", "type": "factual|inference", "structured_evidence": []}]
 }
@@ -86,7 +91,8 @@ export function fallbackReason(facts: Fact[]): ReasonOut | null {
   const toEv = (f: Fact): StructuredEvidence => ({
     fact_id: f.id,
     metric: f.metric,
-    value: f.value ?? f.valueText
+    value: f.value ?? f.valueText,
+    dims: f.dims,
   })
 
   return {

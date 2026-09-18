@@ -120,35 +120,54 @@ export async function computeFacts(sb) {
     })
   }
 
+  // --- Python ML layer -----------------------------------------------------
+  // Fail-OPEN by design: the SQL facts above are the trustworthy core of the
+  // system. A missing python3, an unset dep, or one bad model must degrade the
+  // batch to SQL-only — not destroy it. Callers see which models were skipped in
+  // the [ml] log line, and the absent facts simply stop grounding answers.
+  // execFile (not exec) => no shell, args passed as an array.
+  const ML_SCRIPTS = [
+    ['forecast', 'ml/forecast.py'],
+    ['churn', 'ml/churn.py'],
+    ['sentiment', 'ml/sentiment.py'],
+  ]
+  const ML_TIMEOUT_MS = 120_000
+  const ML_MAXBUFFER = 32 * 1024 * 1024 // 32MB — default 1MB truncates larger fact batches
+
   const pyFacts = []
-  try {
-    const { exec } = await import('node:child_process')
+  const mlSkipped = []
+  {
+    const { execFile } = await import('node:child_process')
     const { promisify } = await import('node:util')
-    const execAsync = promisify(exec)
-    
-    // Pass the Supabase URL and Key dynamically to python
-    const env = { 
-      ...process.env, 
+    const execFileAsync = promisify(execFile)
+
+    // Child inherits the parent env plus the resolved Supabase creds.
+    const env = {
+      ...process.env,
       NEXT_PUBLIC_SUPABASE_URL: url,
-      SUPABASE_SERVICE_ROLE_KEY: key
+      SUPABASE_SERVICE_ROLE_KEY: key,
     }
-    
-    console.log("Running Python ML (forecast)...")
-    const { stdout: fcOut } = await execAsync('python3 ml/forecast.py', { env })
-    const fcFacts = JSON.parse(fcOut || '[]')
-    
-    console.log("Running Python ML (churn)...")
-    const { stdout: chOut } = await execAsync('python3 ml/churn.py', { env })
-    const chFacts = JSON.parse(chOut || '[]')
-    
-    console.log("Running Python ML (sentiment)...")
-    const { stdout: seOut } = await execAsync('python3 ml/sentiment.py', { env })
-    const seFacts = JSON.parse(seOut || '[]')
-    
-    pyFacts.push(...fcFacts, ...chFacts, ...seFacts)
-  } catch (e) {
-    console.error(`Error running Python ML: ${e.message}`)
-    throw new Error(`Python ML failed: ${e.message}`)
+
+    for (const [name, script] of ML_SCRIPTS) {
+      try {
+        const { stdout } = await execFileAsync('python3', [script], {
+          env,
+          timeout: ML_TIMEOUT_MS,
+          maxBuffer: ML_MAXBUFFER,
+        })
+        const parsed = JSON.parse(stdout || '[]')
+        if (!Array.isArray(parsed)) throw new Error('expected a JSON array')
+        pyFacts.push(...parsed)
+      } catch (e) {
+        // Never rethrow: a broken model degrades this batch, it does not fail it.
+        mlSkipped.push(name)
+        console.error(`[ml] ${name} skipped: ${e.message}`)
+      }
+    }
+    console.log(
+      `[ml] ${pyFacts.length} facts from ${ML_SCRIPTS.length - mlSkipped.length}/${ML_SCRIPTS.length} models` +
+        (mlSkipped.length ? ` (skipped: ${mlSkipped.join(', ')})` : '')
+    )
   }
 
   // Generate deterministic fact IDs for Python ML facts to prevent conflicts
@@ -163,8 +182,12 @@ export async function computeFacts(sb) {
   }
 
   if (!facts.length) {
-    console.error('No facts computed for this batch. Aborting publication to preserve last known-good state (Missing Data).')
-    process.exit(1)
+    // throw, never process.exit — run.mjs wraps this in stage() and must be allowed
+    // to write the failure to job_runs. process.exit here strands the row at
+    // status='running' forever and the System Health panel silently lies.
+    throw new Error(
+      'No facts computed for this batch — aborting publication to preserve last known-good state.'
+    )
   }
 
   // W1 — quality + health pass before persistence.
@@ -176,14 +199,32 @@ export async function computeFacts(sb) {
       `[health] mean=${summary.mean} p10=${summary.p10} low=${summary.low_quality}`
   )
 
+  // --- stale pruning, metric-scoped ---------------------------------------
+  // The concern that motivated disabling this was real: if a source view returns
+  // empty for one run, a naive "delete everything not in the new set" wipes good
+  // facts. But leaving `stale` permanently empty is not the fix — data_health is a
+  // STORED column, read back via .gte('data_health', 0.5) in the retriever and
+  // never recomputed. Orphaned facts therefore keep their frozen score, stay above
+  // the gate, and ground answers forever. The table only grows.
+  //
+  // Correct rule: only prune inside metrics this batch actually produced. A metric
+  // that yielded nothing (empty source, skipped ML model) is left fully intact;
+  // a metric that yielded facts has its superseded rows removed.
   const newIds = new Set(facts.map((f) => f.id))
-  const { data: existing, error: listErr } = await sb.from('facts').select('id')
+  const producedMetrics = new Set(facts.map((f) => f.metric))
+
+  const { data: existing, error: listErr } = await sb.from('facts').select('id, metric')
   if (listErr) throw new Error(`facts list: ${listErr.message}`)
 
-  // PHASE 1A: Do not delete old facts just because their source is temporarily empty.
-  // They will naturally decay out of LLM grounding via data_health scoring.
-  const stale = [] 
-  
+  const stale = (existing ?? [])
+    .filter((row) => producedMetrics.has(row.metric) && !newIds.has(row.id))
+    .map((row) => row.id)
+
+  console.log(
+    `[prune] ${stale.length} superseded facts across ${producedMetrics.size} recomputed metrics ` +
+      `(${(existing ?? []).length} existing, ${facts.length} incoming)`
+  )
+
   const { error } = await sb.rpc('publish_facts', {
     new_facts: facts,
     stale_ids: stale
