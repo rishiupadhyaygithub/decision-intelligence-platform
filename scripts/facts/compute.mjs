@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto'
 import { createClient } from '@supabase/supabase-js'
 import { flagOutliers } from './quality.mjs'
 import { scoreHealth, healthSummary } from './health.mjs'
+import { FACT_REGISTRY } from './registry.mjs'
 
 const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
 const key = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -43,7 +44,11 @@ const std = (a) => {
   const m = mean(a)
   return Math.sqrt(mean(a.map((x) => (x - m) ** 2)))
 }
-const conf = (n) => Math.min(0.95, Math.round((1 - 1 / Math.sqrt(Math.max(n, 1))) * 100) / 100)
+// Sample-size confidence. Uses sqrt(n + 1) rather than sqrt(n): the un-smoothed
+// form returns exactly 0 at n = 1, and because data_health multiplies its factors
+// together, a single zero silently zeroed the whole score for every single-row
+// metric. Smoothing keeps it monotonic and bounded in (0, 0.95].
+const conf = (n) => Math.min(0.95, Math.round((1 - 1 / Math.sqrt(Math.max(n, 1) + 1)) * 100) / 100)
 
 async function readView(sb, name, orderByCols = []) {
   const allData = []
@@ -128,7 +133,10 @@ export async function computeFacts(sb) {
   // 4. Inventory
   for (const r of await readView(sb, 'v_fact_inventory', ['sku_id', 'region'])) {
     push('inventory_cover_ratio', { sku: r.sku_id, region: r.region }, Number(r.cover_ratio), {
-      window: 'latest', method: 'sql', n: 1, valueText: r.below_reorder ? 'below_reorder' : 'ok',
+      // Direct read of the latest snapshot, not a sampled estimate — carry an
+      // explicit confidence like margin_pct rather than inheriting conf(n=1).
+      window: 'latest', method: 'sql', n: 1, confidence: 0.95,
+      valueText: r.below_reorder ? 'below_reorder' : 'ok',
     })
   }
 
@@ -235,7 +243,9 @@ export async function computeFacts(sb) {
 
   // W1 — quality + health pass before persistence.
   const qual = flagOutliers(facts)
-  scoreHealth(facts)
+  // Pass the registry — without it every metric falls back to target_n = 12,
+  // which drives snapshot metrics (n=1) below the retriever's data_health gate.
+  scoreHealth(facts, FACT_REGISTRY)
   const summary = healthSummary(facts)
   console.log(
     `[quality] flagged ${qual.flagged}/${qual.totalScanned} unstable; ` +
