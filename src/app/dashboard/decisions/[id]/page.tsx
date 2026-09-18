@@ -39,7 +39,10 @@ export default async function DecisionDetail({ params }: { params: Promise<{ id:
     supabase.from('alternatives').select('*').eq('decision_id', id),
     supabase
       .from('decision_facts')
-      .select('fact_id, facts(id,metric,dims,value,value_text,time_window)')
+      // fact_snapshot is the immutable copy captured at citation time (0013). The
+      // joined facts() row is null once that fact is pruned from the live table,
+      // so the snapshot is what keeps old decisions auditable — always select both.
+      .select('fact_id, fact_snapshot, facts(id,metric,dims,value,value_text,time_window)')
       .eq('decision_id', id),
     supabase.from('audit_log').select('*').eq('decision_id', id).order('created_at', { ascending: true }),
     supabase
@@ -52,8 +55,9 @@ export default async function DecisionDetail({ params }: { params: Promise<{ id:
   const e = enrRes.data
   const risks = riskRes.data ?? []
   const alts = altRes.data ?? []
-  const facts = (factRes.data ?? []) as unknown as {
-    fact_id: string
+  const factRows = (factRes.data ?? []) as unknown as {
+    fact_id: string | null
+    fact_snapshot: { id?: string; metric?: string; value?: number | string | null; window?: string | null } | null
     facts: {
       id: string
       metric: string
@@ -63,7 +67,19 @@ export default async function DecisionDetail({ params }: { params: Promise<{ id:
       time_window: string | null
     } | null
   }[]
-  const ctx = extractContext(facts)
+
+  // Collapse each citation to one display shape. The live fact wins when it still
+  // exists (it carries dims); otherwise fall back to the snapshot so a pruned fact
+  // still shows what was cited instead of rendering an empty row.
+  const facts = factRows.map((row) => ({
+    fact_id: row.fact_id ?? row.fact_snapshot?.id ?? null,
+    metric: row.facts?.metric ?? row.fact_snapshot?.metric ?? null,
+    value: row.facts ? (row.facts.value ?? row.facts.value_text) : (row.fact_snapshot?.value ?? null),
+    window: row.facts?.time_window ?? row.fact_snapshot?.window ?? null,
+    live: !!row.facts,
+  }))
+
+  const ctx = extractContext(factRows)
   const audit = auditRes.data ?? []
   const outcomes = outcomeRes.data ?? []
 
@@ -156,15 +172,25 @@ export default async function DecisionDetail({ params }: { params: Promise<{ id:
           <div className="bg-white rounded-xl border border-slate-200 p-6">
             <h3 className="font-medium text-slate-900 mb-3">Facts cited</h3>
             <ul className="space-y-1.5">
-              {facts.map((row) => (
-                <li key={row.fact_id} className="flex items-center gap-2 text-xs text-slate-600">
-                  <FactChip id={row.fact_id} />
-                  {row.facts && (
+              {facts.map((row, i) => (
+                <li key={row.fact_id ?? `cite-${i}`} className="flex items-center gap-2 text-xs text-slate-600">
+                  {row.fact_id && <FactChip id={row.fact_id} />}
+                  {row.metric ? (
                     <>
-                      <span className="font-medium">{row.facts.metric}</span>
-                      <span className="text-slate-400">= {String(row.facts.value ?? row.facts.value_text)}</span>
-                      {row.facts.time_window && <span className="text-slate-400">· {row.facts.time_window}</span>}
+                      <span className="font-medium">{row.metric}</span>
+                      <span className="text-slate-400">= {String(row.value)}</span>
+                      {row.window && <span className="text-slate-400">· {row.window}</span>}
+                      {!row.live && (
+                        <span
+                          className="text-amber-600 border border-amber-200 bg-amber-50 rounded px-1"
+                          title="This fact is no longer in the live fact store. Shown from the snapshot captured when the decision was made."
+                        >
+                          archived
+                        </span>
+                      )}
                     </>
+                  ) : (
+                    <span className="text-slate-400 italic">citation recorded, evidence unavailable</span>
                   )}
                 </li>
               ))}
