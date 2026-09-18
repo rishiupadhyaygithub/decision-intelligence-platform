@@ -6,12 +6,31 @@ import { scoreHealth, healthSummary } from './health.mjs'
 
 const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
 const key = process.env.SUPABASE_SERVICE_ROLE_KEY
-if (!url || !key) {
-  console.error('Set NEXT_PUBLIC_SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY.')
-  process.exit(1)
+
+// Checked lazily, not at module scope. A top-level process.exit fires on *import*,
+// which killed the process before run.mjs could log the failure to job_runs and
+// made this module impossible to import from a test that does not need a DB.
+
+// Every column on `facts` (0001_init.sql + 0007_facts_lineage.sql). publish_facts
+// inserts through jsonb_populate_recordset(null::facts, ...), which drops unknown
+// keys without complaint — so anything not in this set is data the pipeline thinks
+// it wrote and the database never stored.
+const FACT_COLUMNS = new Set([
+  'id', 'metric', 'dims', 'value', 'value_text', 'time_window', 'method',
+  'sample_n', 'confidence', 'computed_at', 'data_health', 'formula_id',
+  'unstable', 'source_rows',
+])
+
+// Keys an external producer emitted that are not columns. `window` is excluded
+// because compute.mjs remaps it to time_window on purpose.
+export function keyDrift(row, allowed = FACT_COLUMNS) {
+  return Object.keys(row).filter((k) => !allowed.has(k) && k !== 'window')
 }
 
 export function createFactsClient() {
+  if (!url || !key) {
+    throw new Error('Set NEXT_PUBLIC_SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY.')
+  }
   return createClient(url, key, { auth: { persistSession: false } })
 }
 
@@ -170,15 +189,39 @@ export async function computeFacts(sb) {
     )
   }
 
-  // Generate deterministic fact IDs for Python ML facts to prevent conflicts
-  // and match the DB schema shape
+  // Normalize Python ML facts onto the exact `facts` column set.
+  //
+  // This MUST be an explicit projection, not a spread. publish_facts inserts via
+  // jsonb_populate_recordset(null::facts, ...), which silently ignores any JSON key
+  // that is not a column — so a misnamed key does not error, it just writes NULL.
+  // ml/*.py emit `window` (as the old scripts/facts/ml.mjs did), while the column
+  // is `time_window`; ml.mjs used to remap it and the Python port dropped that, so
+  // every ML fact was landing with a null horizon. Mapping it here keeps the fix at
+  // the single boundary where the DB contract is asserted, and keyDrift() below
+  // makes any future mismatch loud instead of silent.
   for (const f of pyFacts) {
-    f.id = factId(f.metric, f.dims)
-    f.computed_at = now
-    f.formula_id = f.formula_id ?? f.metric
-    f.source_rows = f.source_rows ?? []
-    f.unstable = f.unstable ?? false
-    facts.push(f)
+    const drift = keyDrift(f)
+    if (drift.length) {
+      console.error(
+        `[ml] ${f.metric}: unrecognized key(s) ${drift.join(', ')} — dropped. ` +
+          `jsonb_populate_recordset would have silently nulled these; fix ml/*.py or extend FACT_COLUMNS.`
+      )
+    }
+    facts.push({
+      id: factId(f.metric, f.dims),
+      metric: f.metric,
+      dims: f.dims,
+      value: f.value ?? null,
+      value_text: f.value_text ?? null,
+      time_window: f.time_window ?? f.window ?? null, // `window` is the ml/*.py spelling
+      method: f.method,
+      sample_n: f.sample_n ?? null,
+      confidence: f.confidence ?? null,
+      computed_at: now,
+      formula_id: f.formula_id ?? f.metric,
+      source_rows: f.source_rows ?? [],
+      unstable: f.unstable ?? false,
+    })
   }
 
   if (!facts.length) {
