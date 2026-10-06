@@ -71,7 +71,7 @@ export default async function DecisionDetail({ params }: { params: Promise<{ id:
   // Collapse each citation to one display shape. The value shown is the one the decision
   // was made on — the snapshot captured at save time — not today's number. The live fact
   // is only used when no snapshot exists, and to flag drift when it has since changed.
-  const facts = factRows.map((row) => {
+  const citations = factRows.map((row) => {
     const snap = row.fact_snapshot
     const current = row.facts ? (row.facts.value ?? row.facts.value_text) : null
     const cited = snap && snap.value !== undefined ? snap.value : current
@@ -87,6 +87,16 @@ export default async function DecisionDetail({ params }: { params: Promise<{ id:
           : null,
     }
   })
+  // decision_facts holds one row per (claim, fact) pair, so a fact backing a claim, a
+  // risk and an alternative appears three times. Show each fact once, with its use count.
+  const byFact = new Map<string, (typeof citations)[number] & { uses: number }>()
+  citations.forEach((c, i) => {
+    const key = c.fact_id ?? `cite-${i}`
+    const seen = byFact.get(key)
+    if (seen) seen.uses += 1
+    else byFact.set(key, { ...c, uses: 1 })
+  })
+  const facts = [...byFact.values()]
 
   const ctx = extractContext(factRows)
   const audit = auditRes.data ?? []
@@ -189,6 +199,11 @@ export default async function DecisionDetail({ params }: { params: Promise<{ id:
                       <span className="font-medium">{row.metric}</span>
                       <span className="text-slate-400">= {String(row.value)}</span>
                       {row.window && <span className="text-slate-400">· {row.window}</span>}
+                      {row.uses > 1 && (
+                        <span className="text-slate-400" title="Number of claims, risks and alternatives citing this fact">
+                          · cited {row.uses}×
+                        </span>
+                      )}
                       {row.drifted_to != null && (
                         <span
                           className="text-indigo-700 border border-indigo-200 bg-indigo-50 rounded px-1"
