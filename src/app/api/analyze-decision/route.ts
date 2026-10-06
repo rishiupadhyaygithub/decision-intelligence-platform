@@ -85,7 +85,14 @@ export async function POST(request: Request) {
       check = validate(r, facts)
     }
   }
+  // Why the LLM answer was thrown away, if it was. Without this the fallback is silent:
+  // the UI just says "deterministic-fallback" and nobody can tell which rule failed.
+  let reasonerRejected: { token: string; reason: string }[] | null = null
   if (!check.ok) {
+    if (model !== 'deterministic-fallback') {
+      reasonerRejected = check.violations.slice(0, 20)
+      console.warn('reasoner output rejected by validator; using fallback', JSON.stringify(reasonerRejected))
+    }
     const fb = fallbackReason(facts)
     if (fb) {
       r = fb
@@ -158,6 +165,11 @@ export async function POST(request: Request) {
   collect('alternative', r.alternatives)
 
   return NextResponse.json({
+    reasoner_rejected: reasonerRejected,
+    // Why the answer is deterministic, if it is: the LLM call itself failed (key, quota,
+    // timeout -- detail in the server log as "Gemini failed") or its answer was rejected.
+    fallback_reason:
+      model !== "deterministic-fallback" ? null : reasonerRejected ? "llm_answer_failed_validation" : "llm_unavailable",
     analysis: {
       lineage,
       summary: r.summary,

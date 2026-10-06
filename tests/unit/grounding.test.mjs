@@ -59,6 +59,16 @@ test('prose citation missing from structured evidence fails', () => {
   assert.equal(validate(answer({ claims }), FACTS).ok, false)
 })
 
+test('valid evidence the prose does not bracket-cite is still accepted', () => {
+  const claims = [{ text: 'Cover is short.', type: 'factual', structured_evidence: [ev(F1)] }]
+  assert.equal(validate(answer({ claims }), FACTS).ok, true)
+})
+
+test('un-bracketed evidence is still value-checked', () => {
+  const claims = [{ text: 'Cover is short.', type: 'factual', structured_evidence: [ev(F1, { value: 9 })] }]
+  assert.equal(validate(answer({ claims }), FACTS).ok, false)
+})
+
 test('an inference with no evidence is allowed', () => {
   const claims = [{ text: 'Demand may recover.', type: 'inference', structured_evidence: [] }]
   assert.equal(validate(answer({ claims }), FACTS).ok, true)

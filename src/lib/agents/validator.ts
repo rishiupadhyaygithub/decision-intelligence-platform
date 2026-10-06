@@ -61,11 +61,12 @@ export function validate(r: ReasonOut, retrieved: Fact[]): ValidateOut {
         violations.push({ token: pid, reason: 'Prose citation missing from structured_evidence' })
       }
     }
-    const proseIdSet = new Set(proseIds)
+    // Evidence that the prose does not bracket-cite is NOT a violation. Each item is
+    // checked below for id, metric, value and dims, so it is grounded on its own. The
+    // reverse direction (an id in prose must be in evidence) above is what stops prose
+    // from citing unbacked facts. Enforcing both made ~40% of valid Gemini answers fail
+    // on formatting alone and silently fall back to the deterministic path.
     for (const ev of evs) {
-      if (!proseIdSet.has(ev.fact_id)) {
-        violations.push({ token: ev.fact_id, reason: 'structured_evidence item not cited in prose text' })
-      }
       if (!validIds.has(ev.fact_id)) {
         violations.push({ token: ev.fact_id, reason: 'cited fact id not in retrieved set' })
         continue
