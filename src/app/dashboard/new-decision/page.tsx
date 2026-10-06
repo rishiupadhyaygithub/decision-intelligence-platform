@@ -31,6 +31,7 @@ interface Analysis {
   model?: string
   grounded: boolean
   facts_used: FactUsed[]
+  lineage?: { claim_type: 'claim' | 'risk' | 'alternative'; claim_index: number; fact_id: string }[]
   skeptic: { disagrees: boolean; refutation: string } | null
   validation: { ok: boolean; violations: { token: string; reason: string }[] }
 }

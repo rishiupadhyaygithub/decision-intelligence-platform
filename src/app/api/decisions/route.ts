@@ -26,6 +26,17 @@ const Analysis = z.object({
     }),
   ),
   validation: z.object({ ok: z.literal(true), violations: z.array(z.any()) }),
+  // Which fact backs which claim. Only ids are accepted; the RPC snapshots the live rows.
+  lineage: z
+    .array(
+      z.object({
+        claim_type: z.enum(['claim', 'risk', 'alternative']),
+        claim_index: z.number().int().min(0).max(100000),
+        fact_id: z.string().min(1).max(200),
+      }),
+    )
+    .max(500)
+    .default([]),
 })
 
 const Body = z.object({

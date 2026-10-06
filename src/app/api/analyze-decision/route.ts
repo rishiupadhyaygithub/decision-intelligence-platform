@@ -122,65 +122,29 @@ export async function POST(request: Request) {
     }
   }
 
-  const decisionId = crypto.randomUUID()
-  const snapshots: any[] = []
-  
-  let claimIndex = 0
-  for (const c of r.claims ?? []) {
-    for (const ev of c.structured_evidence ?? []) {
-      const fact = usedFacts.find(f => f.id === ev.fact_id)
-      if (fact) snapshots.push({ claim_index: claimIndex, claim_type: 'claim', fact_id: fact.id, fact_snapshot: fact })
-    }
-    claimIndex++
+  // Analyse is a preview: nothing is persisted here. Persisting on every click left an
+  // orphan decision (random id, default type) next to the one "Save" creates. We only
+  // return which fact backs which claim; save_decision_bundle (0016) snapshots the live
+  // fact rows server-side when the user saves.
+  const lineage: { claim_type: 'claim' | 'risk' | 'alternative'; claim_index: number; fact_id: string }[] = []
+  const usedIds = new Set(usedFacts.map((f) => f.id))
+  const collect = (
+    claim_type: 'claim' | 'risk' | 'alternative',
+    items: { structured_evidence?: { fact_id: string }[] }[] | undefined,
+  ) => {
+    ;(items ?? []).forEach((item, claim_index) => {
+      for (const ev of item.structured_evidence ?? []) {
+        if (usedIds.has(ev.fact_id)) lineage.push({ claim_type, claim_index, fact_id: ev.fact_id })
+      }
+    })
   }
-
-  let riskIndex = 0
-  for (const c of r.risks ?? []) {
-    for (const ev of c.structured_evidence ?? []) {
-      const fact = usedFacts.find(f => f.id === ev.fact_id)
-      if (fact) snapshots.push({ claim_index: riskIndex, claim_type: 'risk', fact_id: fact.id, fact_snapshot: fact })
-    }
-    riskIndex++
-  }
-
-  let altIndex = 0
-  for (const c of r.alternatives ?? []) {
-    for (const ev of c.structured_evidence ?? []) {
-      const fact = usedFacts.find(f => f.id === ev.fact_id)
-      if (fact) snapshots.push({ claim_index: altIndex, claim_type: 'alternative', fact_id: fact.id, fact_snapshot: fact })
-    }
-    altIndex++
-  }
-
-  const decisionObj = {
-    id: decisionId,
-    title,
-    problem: proposal,
-    enrichment: {
-      summary: r.summary,
-      recommendation: r.recommendation,
-      confidence: confAvg,
-      dataHealth: dataHealth,
-      riskLevel: r.risks?.[0]?.severity ?? 'low',
-      model,
-      grounded: grounded && strict.passed
-    }
-  }
-
-  const { data: saveResult, error: saveError } = await supabase.rpc('save_decision_lineage', {
-    p_decision: decisionObj,
-    p_snapshots: snapshots
-  })
-
-  if (saveError) {
-    console.error('Failed to save decision lineage:', saveError)
-  }
+  collect('claim', r.claims)
+  collect('risk', r.risks)
+  collect('alternative', r.alternatives)
 
   return NextResponse.json({
-    id: decisionId,
-    saved: !!saveResult,
-    saved_snapshots: saveResult?.snapshots ?? 0,
     analysis: {
+      lineage,
       summary: r.summary,
       top_risks: (r.risks ?? []).map((x) => ({
         risk: x.risk,
