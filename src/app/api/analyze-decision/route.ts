@@ -64,8 +64,9 @@ export async function POST(request: Request) {
     )
   }
 
-  let model = 'gemini-3.5-flash'
   let r = await reason(decisionText, facts)
+  // The adapter walks a chain of Gemini models, so record the one that answered.
+  let model = r?.model ?? 'gemini'
   if (!r) {
     r = fallbackReason(facts)
     model = 'deterministic-fallback'
@@ -82,6 +83,7 @@ export async function POST(request: Request) {
     )
     if (retry) {
       r = retry
+      model = retry.model ?? model
       check = validate(r, facts)
     }
   }

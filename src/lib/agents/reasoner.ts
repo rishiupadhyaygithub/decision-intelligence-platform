@@ -1,4 +1,4 @@
-import { llm, parseJson } from './adapter'
+import { llmWithModel, parseJson } from './adapter'
 import type { Fact, Severity } from '@/lib/types'
 
 export interface StructuredEvidence {
@@ -23,6 +23,8 @@ export interface ReasonOut {
   risks: { risk: string; severity: Severity; type: 'factual' | 'inference'; structured_evidence: StructuredEvidence[] }[]
   alternatives: { option: string; tradeoff: string; type: 'factual' | 'inference'; structured_evidence: StructuredEvidence[] }[]
   claims: Claim[]
+  // Which model actually answered (set by reason(); the adapter may fall back down its chain).
+  model?: string
 }
 
 function factsBlock(facts: Fact[]): string {
@@ -63,9 +65,10 @@ OUTPUT SCHEMA:
 ${decisionText}
 === END UNTRUSTED USER PROPOSAL ===`
 
-  return parseJson<ReasonOut>(
-    await llm(prompt, { tier: 'smart', json: true, system: sys, maxTokens: 8192 }),
-  )
+  const res = await llmWithModel(prompt, { tier: 'smart', json: true, system: sys, maxTokens: 8192 })
+  const out = parseJson<ReasonOut>(res?.text ?? null)
+  if (out && res) out.model = res.model
+  return out
 }
 
 function factLabel(fact: Fact): string {
