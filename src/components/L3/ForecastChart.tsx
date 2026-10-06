@@ -77,6 +77,9 @@ export function ForecastChart({
 
   useEffect(() => {
     let cancelled = false
+    setFc(null)
+    setCh(null)
+    setErr(null)
     Promise.all([
       fetch('/api/forecast', {
         method: 'POST',
@@ -93,15 +96,8 @@ export function ForecastChart({
         if (cancelled) return
         setFc(f)
         setCh(c)
-        setErr(null)
       })
-      .catch((e: Error) => {
-        if (!cancelled) {
-          setFc(null)
-          setCh(null)
-          setErr(e.message)
-        }
-      })
+      .catch((e: Error) => !cancelled && setErr(e.message))
     return () => {
       cancelled = true
     }

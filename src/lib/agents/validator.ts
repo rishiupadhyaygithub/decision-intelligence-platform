@@ -1,5 +1,5 @@
 import type { Fact } from '@/lib/types'
-import type { ReasonOut, StructuredEvidence } from './reasoner'
+import type { ReasonOut, Claim, StructuredEvidence } from './reasoner'
 
 export interface Violation {
   token: string
@@ -17,7 +17,7 @@ function idsInText(text: string | undefined): string[] {
   return Array.from(text.matchAll(CITATION)).map((match) => match[1])
 }
 
-export function collectCitedFactIds(r: ReasonOut, _retrieved: Fact[]): Set<string> {
+export function collectCitedFactIds(r: ReasonOut, retrieved: Fact[]): Set<string> {
   const cited = new Set<string>()
   const addText = (text: string | undefined) => {
     for (const id of idsInText(text)) cited.add(id)

@@ -37,6 +37,8 @@ export function DriverPanel({ sku, region }: { sku: string; region: string }) {
 
   useEffect(() => {
     let cancelled = false
+    setData(null)
+    setErr(null)
     fetch('/api/diagnose', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -50,10 +52,7 @@ export function DriverPanel({ sku, region }: { sku: string; region: string }) {
         if (!cancelled) setData(d)
       })
       .catch((e: Error) => {
-        if (!cancelled) {
-          setData(null)
-          setErr(e.message)
-        }
+        if (!cancelled) setErr(e.message)
       })
     return () => {
       cancelled = true

@@ -19,6 +19,9 @@ type VelocityRow = { sku_id: string; region: string; week: string; units: number
 type CompSignalRow = { detected_at: string; urgent: boolean | null }
 type InvRow = { sku_id: string; region: string; snapshot_date: string; cover_ratio: number | string }
 
+function toWeek(iso: string): string {
+  return iso.slice(0, 10)
+}
 
 // Snap ISO date to the Monday of its week — matches v_sku_velocity.week format
 // so competitor pressure bucket aligns with velocity + inventory series.

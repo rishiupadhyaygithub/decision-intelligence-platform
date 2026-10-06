@@ -23,8 +23,7 @@ export async function middleware(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser()
   const path = request.nextUrl.pathname
-  const isPublicApi = path.startsWith('/api/auth/')
-  const isProtected = !isPublicApi && (path.startsWith('/dashboard') || path.startsWith('/api/'))
+  const isProtected = path.startsWith('/dashboard') || path === '/api/analyze-decision' || path === '/api/decisions'
 
   if (!user && isProtected) {
     if (path.startsWith('/api/')) {
@@ -40,5 +39,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/dashboard/:path*', '/api/:path*'],
+  matcher: ['/dashboard/:path*', '/api/analyze-decision', '/api/decisions'],
 }
