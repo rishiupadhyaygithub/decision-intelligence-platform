@@ -19,7 +19,7 @@ BI shows what happened. Chatbots guess what to do. DecisionOS answers all four q
 - Supabase Postgres (facts + decisions + outcomes + RLS + Auth)
 - Recharts for visualization
 - Gemini for LLM reasoning; deterministic fallback + skeptic pass
-- Python offline trainers (`ml/forecast.py`, `ml/churn.py`) feed `facts` via `scripts/facts/ml.mjs`
+- Python offline trainers (`ml/forecast.py`, `ml/churn.py`) feed `facts` via `scripts/facts/compute.mjs`
 - GitHub Actions cron runs the pipeline
 
 Zero-infra: forecast/churn also run in-process via TS modules so the UI stays snappy without a Python service.
