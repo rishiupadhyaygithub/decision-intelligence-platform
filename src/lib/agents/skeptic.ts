@@ -18,6 +18,6 @@ export async function skeptic(recommendation: string, facts: Fact[]): Promise<Sk
     f || '(none)'
   }\nReturn JSON: {"disagree":true|false,"refutation":"...","weakestPoint":"..."}`
   return parseJson<SkepticOut>(
-    await llm(prompt, { tier: 'fast', json: true, system: sys, maxTokens: 400 }),
+    await llm(prompt, { tier: 'fast', json: true, system: sys, maxTokens: 2048 }),
   )
 }

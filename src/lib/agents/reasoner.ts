@@ -64,7 +64,7 @@ ${decisionText}
 === END UNTRUSTED USER PROPOSAL ===`
 
   return parseJson<ReasonOut>(
-    await llm(prompt, { tier: 'smart', json: true, system: sys, maxTokens: 1000 }),
+    await llm(prompt, { tier: 'smart', json: true, system: sys, maxTokens: 8192 }),
   )
 }
 

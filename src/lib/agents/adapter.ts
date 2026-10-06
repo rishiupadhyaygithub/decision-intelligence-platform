@@ -32,6 +32,13 @@ export async function llm(prompt: string, opts: LlmOpts = {}): Promise<string | 
     // Bounded so a slow Gemini call degrades to the deterministic fallback instead of
     // holding the request open until the platform kills it.
     const r = await model.generateContent(prompt, { timeout: 20_000 })
+    // Gemini 3.x are thinking models: thinking tokens count against maxOutputTokens, so a
+    // tight budget ends in MAX_TOKENS with empty or truncated JSON. Callers then fall back
+    // to the deterministic path with no trace of why — log it so it is visible.
+    const finish = r.response.candidates?.[0]?.finishReason
+    if (finish && finish !== 'STOP') {
+      console.warn('Gemini finished early:', finish, JSON.stringify(r.response.usageMetadata ?? {}))
+    }
     return r.response.text()
   } catch (e) {
     console.error("Gemini failed:", e)

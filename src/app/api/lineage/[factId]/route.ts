@@ -22,7 +22,10 @@ export async function GET(
     .eq('id', factId)
     .maybeSingle()
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    console.error('lineage: fact lookup failed', error)
+    return NextResponse.json({ error: 'internal_error' }, { status: 500 })
+  }
   if (!data) return NextResponse.json({ error: 'not_found' }, { status: 404 })
 
   const spec = getMetric(data.formula_id ?? data.metric)

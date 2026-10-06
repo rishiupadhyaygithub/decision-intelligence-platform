@@ -44,6 +44,12 @@ export function LineageDrawer({ factId, onClose }: { factId: string; onClose: ()
     let cancelled = false
     fetch(`/api/lineage/${encodeURIComponent(factId)}`)
       .then(async (r) => {
+        if (r.status === 404) {
+          throw new Error(
+            'This fact is no longer in the live store — it was superseded by a newer pipeline run. ' +
+              'The value cited at decision time is preserved on the decision page.',
+          )
+        }
         if (!r.ok) throw new Error(`HTTP ${r.status}`)
         return r.json() as Promise<LineageResponse>
       })

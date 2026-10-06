@@ -45,7 +45,10 @@ export async function POST(request: Request) {
   ])
 
   for (const r of [velRes, factRes]) {
-    if (r.error) return NextResponse.json({ error: r.error.message }, { status: 500 })
+    if (r.error) {
+      console.error('forecast: query failed', r.error)
+      return NextResponse.json({ error: 'internal_error' }, { status: 500 })
+    }
   }
 
   const rows = (velRes.data ?? []) as VelocityRow[]

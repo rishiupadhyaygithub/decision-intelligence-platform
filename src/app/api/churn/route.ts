@@ -28,9 +28,12 @@ export async function POST(request: Request) {
   const { data, error } = await supabase
     .from('facts')
     .select('id, metric, dims, value')
-    .in('metric', ['sku_velocity_delta', 'inventory_cover_ratio', 'competitor_pressure_pct'])
+    .in('metric', ['sku_velocity_delta', 'inventory_cover_ratio', 'competitor_pressure_pct', 'churn_risk'])
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    console.error('churn: facts query failed', error)
+    return NextResponse.json({ error: 'internal_error' }, { status: 500 })
+  }
   const facts = (data ?? []) as FactRow[]
 
   const pick = (metric: string, dims: Record<string, unknown>): FactRow | undefined =>
@@ -51,14 +54,29 @@ export async function POST(request: Request) {
     competitor_pressure_pct: comp?.value ?? null,
   })
 
-  const cited = [vel?.id, inv?.id, comp?.id].filter(Boolean) as string[]
+  // The trained model answers a DIFFERENT question than the rule-based score, so it is
+  // returned alongside, never substituted: ml/churn.py predicts next week's units falling
+  // >15% below the trailing-3-week mean; churn() estimates losing >20% next quarter.
+  const ml = pick('churn_risk', { sku, region })
+
+  const cited = [vel?.id, inv?.id, comp?.id, ml?.id].filter(Boolean) as string[]
 
   return NextResponse.json({
     target: { sku, region },
     churn: out,
+    ml_churn:
+      ml && ml.value != null
+        ? {
+            risk_score: Number(ml.value),
+            predicts: 'next-week units fall >15% below trailing-3-week mean',
+            method: 'ml:logreg (ml/churn.py, offline pipeline)',
+            fact_id: ml.id,
+          }
+        : null,
     cited_fact_ids: cited,
     note:
-      'Rule-based logistic — fast in-process scoring. ' +
-      'Python GBM (ml/churn.py) runs offline via facts pipeline for a stronger baseline.',
+      'churn = rule-based logistic estimate of losing >20% next quarter. ' +
+      'ml_churn = logistic regression trained offline on velocity history (different horizon). ' +
+      'Competitor pressure is category-level: competitor_signal has no sku/region columns.',
   })
 }

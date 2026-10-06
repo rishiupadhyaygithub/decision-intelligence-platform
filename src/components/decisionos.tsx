@@ -66,7 +66,10 @@ export function Gauge({ value, label }: { value: number | null; label: string })
   const color = v >= 70 ? '#10b981' : v >= 40 ? '#6366f1' : '#f59e0b'
   return (
     <div className="flex-1 rounded-lg bg-slate-50 border border-slate-200 px-3 py-3 flex items-center gap-3">
-      <svg width="72" height="72" viewBox="0 0 72 72" className="shrink-0">
+      <svg
+        width="72" height="72" viewBox="0 0 72 72" className="shrink-0"
+        role="img" aria-label={`${label}: ${value ?? 'not available'} out of 100`}
+      >
         <circle cx="36" cy="36" r={r} fill="none" stroke="#e2e8f0" strokeWidth="7" />
         <circle
           cx="36" cy="36" r={r} fill="none" stroke={color} strokeWidth="7" strokeLinecap="round"

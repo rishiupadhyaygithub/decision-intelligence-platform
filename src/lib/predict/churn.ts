@@ -2,9 +2,9 @@
 // Inputs: recent velocity delta %, stockout risk ratio, competitor pressure %.
 // Output: probability the SKU loses > 20% next quarter.
 //
-// Coefficients handpicked from directional signal — Python trainer
-// (ml/churn.py) fits a proper GBM offline; this is the fast in-process fallback
-// so the UI works without invoking Python.
+// Coefficients handpicked from directional signal. ml/churn.py is NOT a trained
+// version of this: it is a logistic regression for a different target (next-week
+// drop >15% vs trailing mean). /api/churn returns both, labelled, side by side.
 
 export interface ChurnFeatures {
   velocity_delta_pct: number | null

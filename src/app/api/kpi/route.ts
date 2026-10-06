@@ -76,7 +76,10 @@ export async function GET(request: Request) {
     .order('computed_at', { ascending: false })
     .limit(limit)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    console.error('kpi: query failed', error)
+    return NextResponse.json({ error: 'internal_error' }, { status: 500 })
+  }
 
   const rows = (data ?? []) as FactRow[]
   const filtered = minHealth > 0
