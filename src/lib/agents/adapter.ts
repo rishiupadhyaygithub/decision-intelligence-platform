@@ -29,7 +29,9 @@ export async function llm(prompt: string, opts: LlmOpts = {}): Promise<string | 
     },
   })
   try {
-    const r = await model.generateContent(prompt)
+    // Bounded so a slow Gemini call degrades to the deterministic fallback instead of
+    // holding the request open until the platform kills it.
+    const r = await model.generateContent(prompt, { timeout: 20_000 })
     return r.response.text()
   } catch (e) {
     console.error("Gemini failed:", e)

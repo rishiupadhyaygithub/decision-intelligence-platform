@@ -47,21 +47,22 @@ export async function retrieveFacts(decisionText: string, limit = 12): Promise<F
   const twoWeeksAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString()
   const safeTerms = Array.from(new Set((decisionText.toLowerCase().match(/[a-z0-9-]{3,}/g) ?? [])))
 
-  let query = sb
+  // No SQL-side term filter: `dims.fts.<term>` on a jsonb column only works where PostgREST
+  // auto-wraps non-tsvector columns in to_tsvector() (newer versions); elsewhere Postgres
+  // raises "operator does not exist: jsonb @@ tsquery" and the error branch below turned
+  // that into "no facts" for every decision. The health/freshness gates already bound the
+  // pool and ranking happens in Node, so the prefilter bought nothing but a failure mode.
+  const { data, error } = await sb
     .from('facts')
     .select('*')
     .gte('computed_at', twoWeeksAgo)
     .gte('data_health', 0.5)
     .is('unstable', false)
+    .order('computed_at', { ascending: false })
+    .limit(1000)
 
-  if (safeTerms.length > 0) {
-    const orClauses = safeTerms.map(t => `metric.ilike.%${t}%,dims.fts.${t}`).join(',')
-    query = query.or(orClauses)
-  }
-
-  const { data, error } = await query
-
-  if (error || !data) return []
+  if (error) throw new Error(`retrieveFacts query failed: ${error.message}`)
+  if (!data) return []
 
   // Rank by term overlap in Node for fine-grained ranking, but now the pool is 
   // safely filtered to only fresh, healthy, relevant facts BEFORE any limit.
@@ -71,13 +72,10 @@ export async function retrieveFacts(decisionText: string, limit = 12): Promise<F
       const score = safeTerms.reduce((s, t) => s + (hay.includes(t) ? 1 : 0), 0)
       return { r, score }
     })
-    .sort((a, b) => b.score - a.score)
-    // Secondary sort by freshness
     .sort((a, b) => {
-      if (a.score === b.score) {
-        return new Date(b.r.computed_at).getTime() - new Date(a.r.computed_at).getTime()
-      }
-      return 0
+      if (b.score !== a.score) return b.score - a.score
+      // Tiebreaker: fresher facts first
+      return new Date(b.r.computed_at).getTime() - new Date(a.r.computed_at).getTime()
     })
 
   const matched = scored.filter((s) => s.score > 0).slice(0, limit)
