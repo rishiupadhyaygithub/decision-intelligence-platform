@@ -1,6 +1,6 @@
 // W4.1 — In-process forecast (TS-native).
 // Decision: skip FastAPI service. Python trainer still runs offline via
-// scripts/facts/ml.mjs to populate ml facts; this module produces on-demand
+// scripts/facts/compute.mjs to populate ml facts; this module produces on-demand
 // forecasts + P10/P50/P90 bands from live series so the UI stays snappy.
 //
 // Model: Simple Exponential Smoothing with damped additive trend.
@@ -26,6 +26,43 @@ export interface ForecastOutput {
   beta: number
   phi: number
   n_train: number
+  // Out-of-sample check: refit without the last `n` weeks, forecast them, compare.
+  // `cv` above is in-sample and therefore optimistic; this is the honest number.
+  // skill = 1 - mae / naive_mae (naive = repeat the last observed value); > 0 means
+  // the model beats doing nothing. null when history is too short to hold any out.
+  holdout: { n: number; mae: number; naive_mae: number; skill: number } | null
+}
+
+// Deterministic h-step damped-trend forecast from the end of y.
+function pointForecast(y: number[], alpha: number, beta: number, phi: number, h: number): number[] {
+  const { level, trend } = desDamped(y, alpha, beta, phi)
+  const l = level[level.length - 1]
+  const b = trend[trend.length - 1]
+  const out: number[] = []
+  let damp = 0
+  for (let k = 1; k <= h; k++) {
+    damp += phi ** k
+    out.push(l + damp * b)
+  }
+  return out
+}
+
+function holdoutCheck(y: number[]): ForecastOutput['holdout'] {
+  if (y.length < 10) return null
+  const n = Math.min(4, Math.floor(y.length / 4))
+  const train = y.slice(0, -n)
+  const test = y.slice(-n)
+  const fit = gridFit(train)
+  const pred = pointForecast(train, fit.alpha, fit.beta, fit.phi, n)
+  const last = train[train.length - 1]
+  const mae = test.reduce((s, v, i) => s + Math.abs(v - pred[i]), 0) / n
+  const naive = test.reduce((s, v) => s + Math.abs(v - last), 0) / n
+  return {
+    n,
+    mae: Number(mae.toFixed(3)),
+    naive_mae: Number(naive.toFixed(3)),
+    skill: naive > 0 ? Number((1 - mae / naive).toFixed(3)) : 0,
+  }
 }
 
 function desDamped(y: number[], alpha: number, beta: number, phi: number) {
@@ -139,6 +176,7 @@ export function forecast(series: Series[], horizon = 4): ForecastOutput {
       beta: 0,
       phi: 0,
       n_train: y.length,
+      holdout: null,
     }
   }
 
@@ -173,5 +211,6 @@ export function forecast(series: Series[], horizon = 4): ForecastOutput {
     beta: best.beta,
     phi: best.phi,
     n_train: y.length,
+    holdout: holdoutCheck(y),
   }
 }

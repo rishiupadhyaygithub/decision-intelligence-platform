@@ -5,6 +5,7 @@
 // L1 fetches /api/kpi, L2 mounts DriverPanel, L3 mounts ForecastChart,
 // L4 renders RecommendationCard from pre-fetched analysis.
 
+import { Skeleton } from '@/components/decisionos'
 import { useEffect, useState } from 'react'
 import { KPICard } from '@/components/L1/KPICard'
 import { DriverPanel } from '@/components/L2/DriverPanel'
@@ -85,7 +86,7 @@ export function LayerTabs({
               KPI fetch failed: {kpiErr}
             </div>
           ) : !kpis ? (
-            <div className="text-sm text-neutral-500">Loading KPIs…</div>
+            <Skeleton rows={2} label="Loading KPIs" />
           ) : (
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {kpis.map((k) => (

@@ -4,6 +4,7 @@
 // Actuals line + P10/P50/P90 band. Churn score chip on the right.
 // Model params + cited fact_ids visible so nothing is a black box.
 
+import { Skeleton } from '@/components/decisionos'
 import { useEffect, useState } from 'react'
 import {
   Area,
@@ -32,6 +33,7 @@ type ForecastResp = {
     beta: number
     phi: number
     n_train: number
+    holdout: { n: number; mae: number; naive_mae: number; skill: number } | null
   }
   input_fact_ids: string[]
   note: string
@@ -44,6 +46,7 @@ type ChurnResp = {
     reasons: string[]
     method: string
   }
+  ml_churn: { risk_score: number; predicts: string; method: string; fact_id: string } | null
   cited_fact_ids: string[]
 }
 
@@ -114,7 +117,7 @@ export function ForecastChart({
       </div>
     )
   }
-  if (!fc || !ch) return <div className="text-sm text-neutral-500">Running forecast…</div>
+  if (!fc || !ch) return <Skeleton rows={2} label="Running forecast" />
 
   const rows: Merged[] = [
     ...fc.history.map((h) => ({
@@ -182,6 +185,12 @@ export function ForecastChart({
           <Stat label="method" value={fc.forecast.method} />
           <Stat label="n_train" value={fc.forecast.n_train} />
           <Stat label="cv" value={fc.forecast.cv} />
+          {fc.forecast.holdout ? (
+            <Stat
+              label={`holdout skill (last ${fc.forecast.holdout.n}w)`}
+              value={`${(fc.forecast.holdout.skill * 100).toFixed(0)}% vs naive`}
+            />
+          ) : null}
           <Stat label="σ_resid" value={fc.forecast.residual_sigma} />
         </div>
 
@@ -215,6 +224,12 @@ export function ForecastChart({
             <li key={i}>• {r}</li>
           ))}
         </ul>
+        {ch.ml_churn ? (
+          <p className="mt-2 text-xs text-neutral-600">
+            Trained model: <span className="font-medium">{(ch.ml_churn.risk_score * 100).toFixed(0)}%</span> risk that{' '}
+            {ch.ml_churn.predicts} <span className="text-neutral-400">({ch.ml_churn.method})</span>
+          </p>
+        ) : null}
         <div className="mt-3 flex flex-wrap gap-1">
           {ch.cited_fact_ids.map((fid) => (
             <button

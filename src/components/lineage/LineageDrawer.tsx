@@ -4,6 +4,7 @@
 // Fetches /api/lineage/[factId] and shows fact row + formula spec + source rows.
 // Rendered on-demand by KPICard and (later) L2/L3/L4 panels.
 
+import { Skeleton } from '@/components/decisionos'
 import { useEffect, useState } from 'react'
 
 type LineageResponse = {
@@ -90,7 +91,7 @@ export function LineageDrawer({ factId, onClose }: { factId: string; onClose: ()
             Could not load lineage: {err}
           </div>
         ) : !data ? (
-          <div className="mt-6 text-sm text-neutral-500">Loading…</div>
+          <div className="mt-6"><Skeleton rows={2} label="Loading lineage" /></div>
         ) : (
           <div className="mt-6 space-y-6 text-sm">
             <Section title="Value">

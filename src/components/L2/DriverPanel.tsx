@@ -4,6 +4,7 @@
 // Fetches /api/diagnose, renders driver waterfall + anomaly list.
 // Every driver row + anomaly links back to fact_ids via lineage drawer.
 
+import { Skeleton } from '@/components/decisionos'
 import { useEffect, useState } from 'react'
 import { LineageDrawer } from '@/components/lineage/LineageDrawer'
 
@@ -67,7 +68,7 @@ export function DriverPanel({ sku, region }: { sku: string; region: string }) {
       </div>
     )
   }
-  if (!data) return <div className="text-sm text-neutral-500">Loading diagnostics…</div>
+  if (!data) return <Skeleton rows={3} label="Loading diagnostics" />
 
   return (
     <div className="space-y-6">

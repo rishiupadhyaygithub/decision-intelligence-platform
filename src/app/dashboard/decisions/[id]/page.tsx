@@ -68,16 +68,25 @@ export default async function DecisionDetail({ params }: { params: Promise<{ id:
     } | null
   }[]
 
-  // Collapse each citation to one display shape. The live fact wins when it still
-  // exists (it carries dims); otherwise fall back to the snapshot so a pruned fact
-  // still shows what was cited instead of rendering an empty row.
-  const facts = factRows.map((row) => ({
-    fact_id: row.fact_id ?? row.fact_snapshot?.id ?? null,
-    metric: row.facts?.metric ?? row.fact_snapshot?.metric ?? null,
-    value: row.facts ? (row.facts.value ?? row.facts.value_text) : (row.fact_snapshot?.value ?? null),
-    window: row.facts?.time_window ?? row.fact_snapshot?.window ?? null,
-    live: !!row.facts,
-  }))
+  // Collapse each citation to one display shape. The value shown is the one the decision
+  // was made on — the snapshot captured at save time — not today's number. The live fact
+  // is only used when no snapshot exists, and to flag drift when it has since changed.
+  const facts = factRows.map((row) => {
+    const snap = row.fact_snapshot
+    const current = row.facts ? (row.facts.value ?? row.facts.value_text) : null
+    const cited = snap && snap.value !== undefined ? snap.value : current
+    return {
+      fact_id: row.fact_id ?? snap?.id ?? null,
+      metric: snap?.metric ?? row.facts?.metric ?? null,
+      value: cited,
+      window: snap?.window ?? row.facts?.time_window ?? null,
+      live: !!row.facts,
+      drifted_to:
+        row.facts && snap && snap.value != null && current != null && String(snap.value) !== String(current)
+          ? current
+          : null,
+    }
+  })
 
   const ctx = extractContext(factRows)
   const audit = auditRes.data ?? []
@@ -180,6 +189,14 @@ export default async function DecisionDetail({ params }: { params: Promise<{ id:
                       <span className="font-medium">{row.metric}</span>
                       <span className="text-slate-400">= {String(row.value)}</span>
                       {row.window && <span className="text-slate-400">· {row.window}</span>}
+                      {row.drifted_to != null && (
+                        <span
+                          className="text-indigo-700 border border-indigo-200 bg-indigo-50 rounded px-1"
+                          title="The live fact has been recomputed since this decision was made. The value on the left is what the decision was based on."
+                        >
+                          now {String(row.drifted_to)}
+                        </span>
+                      )}
                       {!row.live && (
                         <span
                           className="text-amber-600 border border-amber-200 bg-amber-50 rounded px-1"

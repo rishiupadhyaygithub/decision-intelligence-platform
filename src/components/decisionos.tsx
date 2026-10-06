@@ -87,6 +87,20 @@ export function Gauge({ value, label }: { value: number | null; label: string })
   )
 }
 
+// Placeholder blocks shaped like the panel that is loading, so slow endpoints
+// (forecast, LLM analysis) read as in-progress rather than broken.
+export function Skeleton({ rows = 3, label }: { rows?: number; label: string }) {
+  return (
+    <div role="status" aria-label={label} className="animate-pulse space-y-2">
+      <div className="h-4 w-1/3 rounded bg-slate-200" />
+      {Array.from({ length: rows }, (_, i) => (
+        <div key={i} className="h-16 rounded bg-slate-100" />
+      ))}
+      <span className="sr-only">{label}</span>
+    </div>
+  )
+}
+
 export function SyntheticNote() {
   return <p className="text-xs text-slate-400 mt-1">Demo data is synthetic (Savora Foods). Not live.</p>
 }

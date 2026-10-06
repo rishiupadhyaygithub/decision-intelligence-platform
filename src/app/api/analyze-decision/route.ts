@@ -26,6 +26,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  // Up to three Gemini calls per request, so cap per user (Postgres-backed, 0017).
+  // Fail open: a limiter outage must not take analysis down with it.
+  const { data: allowed, error: rlError } = await supabase.rpc('check_rate_limit', {
+    p_route: 'analyze-decision',
+    p_max: 10,
+    p_window_secs: 60,
+  })
+  if (rlError) console.error('check_rate_limit failed; allowing request', rlError)
+  else if (allowed === false) {
+    return NextResponse.json(
+      { error: 'Too many analyses in the last minute. Try again shortly.' },
+      { status: 429, headers: { 'Retry-After': '60' } },
+    )
+  }
+
   const json = await request.json().catch(() => null)
   const parsed = Body.safeParse(json)
   if (!parsed.success) {
