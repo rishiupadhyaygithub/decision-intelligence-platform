@@ -65,6 +65,18 @@ async function generate(sb) {
 }
 
 // Public entrypoint. Returns number of rows ingested.
+// The synthetic stream only ever runs on the demo dataset. Once a team imports its own
+// data (app_settings.data_mode = 'custom', migration 0018) appending fake sales would
+// corrupt it, so ingest becomes a no-op. A missing table means a pre-0018 install,
+// which can only hold demo data.
 export async function ingestMarketData(sb) {
+  const { data, error } = await sb.from('app_settings').select('value').eq('key', 'data_mode').maybeSingle()
+  if (error && !/app_settings|does not exist|schema cache/i.test(error.message)) {
+    throw new Error(`ingest read data_mode: ${error.message}`)
+  }
+  if (data?.value === 'custom') {
+    console.log('[ingest] custom dataset: synthetic stream skipped')
+    return 0
+  }
   return generate(sb)
 }

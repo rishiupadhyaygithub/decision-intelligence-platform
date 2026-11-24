@@ -43,6 +43,7 @@ export default function TopNav({ email }: { email?: string }) {
             {tab('/dashboard', 'Dashboard')}
             {tab('/dashboard/new-decision', 'New decision')}
             {tab('/dashboard/memory', 'Memory')}
+            {tab('/dashboard/data', 'Data')}
           </div>
         </div>
         <div className="flex items-center gap-3">

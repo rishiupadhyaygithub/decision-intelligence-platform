@@ -101,6 +101,5 @@ export function Skeleton({ rows = 3, label }: { rows?: number; label: string }) 
   )
 }
 
-export function SyntheticNote() {
-  return <p className="text-xs text-slate-400 mt-1">Demo data is synthetic (Savora Foods). Not live.</p>
-}
+// Client component (reads the data mode); re-exported so existing imports keep working.
+export { default as SyntheticNote } from './SyntheticNote'

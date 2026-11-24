@@ -74,7 +74,9 @@ async function readView(sb, name, orderByCols = []) {
   return allData
 }
 
-export async function computeFacts(sb) {
+// opts.ml = false skips the Python models (used by the in-app import: the request must
+// finish in seconds and serverless hosts have no python3). The nightly pipeline runs them.
+export async function computeFacts(sb, opts = {}) {
   const facts = []
   const now = new Date().toISOString()
   // Every metric maps to a formula_id and a source view for lineage. Kept
@@ -163,7 +165,9 @@ export async function computeFacts(sb) {
 
   const pyFacts = []
   const mlSkipped = []
-  {
+  if (opts.ml === false) {
+    console.log('[ml] skipped by caller (ml: false)')
+  } else {
     const { execFile } = await import('node:child_process')
     const { promisify } = await import('node:util')
     const execFileAsync = promisify(execFile)
