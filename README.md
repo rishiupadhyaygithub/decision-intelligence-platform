@@ -1,116 +1,112 @@
-# DecisionOS — Decision Intelligence Platform
+# DecisionOS
 
-Turns Supabase operational data into **auditable recommendations**. Every displayed number cites a `facts` row; click any number to open its lineage (formula, source rows, data-health score).
+**Open-source decision intelligence: from your sales data to an auditable recommendation, where every number cites its source.**
 
-## What's different
-
-BI shows what happened. Chatbots guess what to do. DecisionOS answers all four questions and shows its work:
+BI dashboards show what happened. Chatbots guess what to do. DecisionOS answers four questions in order and shows its work at every step:
 
 | Layer | Question | How |
 |-------|----------|-----|
-| **L1 Descriptive** | What happened? | KPIs from `facts`, each with `fact_id` + `data_health` chip |
+| **L1 Descriptive** | What happened? | KPIs computed into a `facts` store; every number carries a `fact_id` and a data-health score |
 | **L2 Diagnostic** | Why did it happen? | Ridge-regression driver decomposition + MAD anomaly detection |
-| **L3 Predictive** | What will happen? | Damped exponential smoothing + bootstrap P10/P50/P90 bands, churn risk |
-| **L4 Prescriptive** | What should we do? | Grounded LLM (Gemini) + strict citation gate + tradeoff generator + composite confidence |
+| **L3 Predictive** | What will happen? | Damped exponential smoothing with bootstrap P10/P50/P90 bands, out-of-sample holdout skill, churn risk |
+| **L4 Prescriptive** | What should we do? | Grounded LLM reasoning (Gemini) behind a strict citation gate, a skeptic pass, tradeoffs and composite confidence. Falls back to a deterministic, fully cited answer when the LLM is unavailable |
 
-## Stack
+Click any number to open its lineage: formula, source rows, freshness, health. Saved decisions keep an immutable snapshot of every fact they cited, and you can record outcomes to close the loop.
 
-- Next.js 16 App Router, React 19, TypeScript, Tailwind
-- Supabase Postgres (facts + decisions + outcomes + RLS + Auth)
-- Recharts for visualization
-- Gemini for LLM reasoning; deterministic fallback + skeptic pass
-- Python offline trainers (`ml/forecast.py`, `ml/churn.py`) feed `facts` via `scripts/facts/compute.mjs`
-- GitHub Actions cron runs the pipeline
+## Quick start
 
-Zero-infra: forecast/churn also run in-process via TS modules so the UI stays snappy without a Python service.
-
-## Go-Live
+You need Node 22.18+ (24 recommended), a free [Supabase](https://supabase.com) project and, optionally, a [Gemini API key](https://aistudio.google.com).
 
 ```bash
+git clone https://github.com/rishiupadhyaygithub/decision-intelligence-platform.git
+cd decision-intelligence-platform
 npm install
-cp .env.local.example .env.local   # fill in keys
-npm run go-live                    # migrations + seed + facts
-npm run dev
+cp .env.example .env.local     # fill in the values (comments explain each one)
+npm run go-live                # applies migrations, loads the demo dataset, computes facts
+npm run doctor                 # checks env, database, schema, freshness, LLM key
+npm run dev                    # http://localhost:3000
 ```
 
-Required env:
+Sign up in the app, then put your email in `ADMIN_EMAILS` (in `.env.local`) to unlock data import.
 
-```bash
-NEXT_PUBLIC_SUPABASE_URL=
-NEXT_PUBLIC_SUPABASE_ANON_KEY=
-SUPABASE_SERVICE_ROLE_KEY=
-SUPABASE_ACCESS_TOKEN=
-GEMINI_API_KEY=
-```
+`go-live` records each applied migration in `_decisionos_migrations` and only runs new ones, so it is safe to re-run. On a database set up before this tracking existed it stops and asks you to run `BASELINE=1 npm run go-live` once, because re-running every migration (0013 rebuilds `decision_facts`) would erase decision history.
 
-**Migration 0007** (`facts_lineage`) must be applied — adds `data_health`, `formula_id`, `unstable`, `source_rows` columns. `npm run go-live` handles it; if you re-ran migrations manually, apply it explicitly:
+## Use your own data
 
-```bash
-npm run check:supabase
-supabase db push   # or use the MCP apply_migration tool
-```
+DecisionOS starts on a synthetic FMCG dataset (Savora Foods: 12 SKUs, 78 weeks) so you can explore immediately. To switch to your data, open **Data** in the app (admins only):
 
-## Endpoints
+1. **Back up** the current dataset (one CSV per table, already in import format).
+2. Choose your CSVs and click **Check files**. Every row is validated server-side and nothing is written. Errors name the file, row and column.
+3. Type `REPLACE` and import. The four tables are swapped in a single transaction (all or nothing), then facts are recomputed so dashboards and analyses use your data immediately. Python models run on the next pipeline run.
 
-| Route | Layer | Purpose |
-|-------|-------|---------|
-| `GET /api/kpi` | L1 | Headline KPIs with `fact_id` + `data_health` |
-| `GET /api/lineage/[factId]` | — | Fact + registry formula + source rows |
-| `POST /api/diagnose` | L2 | Driver decomposition + anomalies for `{sku, region}` |
-| `POST /api/forecast` | L3 | DES forecast with bootstrap bands |
-| `POST /api/churn` | L3 | Churn risk score + reasons |
-| `POST /api/analyze-decision` | L4 | Grounded recommendation + tradeoffs + composite confidence |
+| File | Required | Columns |
+|------|----------|---------|
+| `skus.csv` | yes | `sku_id,name,category,mrp,unit_cost,launched_on` |
+| `sales.csv` | yes | `sku_id,region,channel,sale_date,units,revenue` (one row per sku/region/channel/day) |
+| `inventory.csv` | no | `sku_id,region,snapshot_date,on_hand,reorder_point` |
+| `signals.csv` | no | `source,category,body,impact,detected_at,urgent` (`impact`: high/medium/low) |
 
-## Verify
+Dates are `YYYY-MM-DD`. Give it at least 8 weeks of sales history; trends and forecasts need it. Working samples live in [`public/samples/`](public/samples). Limits: 10 MB per file, 250k rows.
 
-Log in through the UI (cookies are needed), then:
+After an import the deployment is in `custom` mode: the pipeline never appends synthetic rows again and the "demo data" notice disappears.
 
-```bash
-curl -s -b cookies.txt localhost:3000/api/kpi?limit=6 | jq .
-curl -s -b cookies.txt -X POST localhost:3000/api/diagnose \
-  -H 'content-type: application/json' \
-  -d '{"sku":"SC-001","region":"West"}' | jq .
-curl -s -b cookies.txt -X POST localhost:3000/api/analyze-decision \
-  -H 'content-type: application/json' \
-  -d '{"title":"Cut SC-001 in West","proposal":"React to Gopal price war"}' | jq .
-```
+## Keep facts fresh
 
-Pass criteria:
-- `analysis.grounded === true`
-- `analysis.facts_used.length >= 2`
-- `analysis.confidence_composite.score > 0`
-- `analysis.strict_grounding.passed === true`
+Facts power everything, and analyses ignore facts older than 14 days. Run the pipeline on a schedule:
 
-## Pages
+- **GitHub Actions** (included, free): `.github/workflows/pipeline.yml` runs daily. Add repository secrets `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`. It also runs the Python models (forecast, churn, sentiment).
+- **Manually**: `npm run pipeline`.
+
+## Deploy
+
+Any Node host works. On Vercel: import the repo, add the variables from `.env.example`, deploy. The Data import route needs up to 60 s (`maxDuration`). The Python models do not run on serverless hosts; they run in the pipeline.
+
+## Free-tier notes
+
+- **Supabase pauses idle free projects.** If the pipeline logs `fetch failed`, or `npm run doctor` says the database did not respond, restore the project in the Supabase dashboard.
+- **Gemini free quota is small.** The adapter walks a chain of models on quota or overload errors (`GEMINI_MODELS_SMART` / `GEMINI_MODELS_FAST`) and finally falls back to the deterministic answer. Responses report `fallback_reason` when that happens.
+
+## Trust and security model
+
+- **Grounding contract.** Every number in an answer must cite a `facts.id`; the validator checks id, metric, value and dimensions, and the strict gate rejects stale, unhealthy or unstable facts.
+- **Data health** = freshness × completeness × confidence, per metric (`scripts/facts/health.mjs`, `registry.mjs`).
+- **Row-level security** on every table. The browser only ever holds the anon key; anonymous visitors cannot read data, views or call privileged functions (migration 0019). Writes go through `SECURITY DEFINER` functions with explicit grants.
+- **One dataset per deployment.** All signed-in users share it; only `ADMIN_EMAILS` can replace it. Decisions are private to their owner.
+- **Rate limit**: 10 analyses per user per minute, Postgres-backed.
+
+## Project layout
 
 | Path | What |
 |------|------|
-| `/dashboard/inbox` | Open decisions sorted by urgency + recency |
-| `/dashboard/decisions/[id]` | Decision detail (drop-in `<LayerTabs />` for L1–L4 view) |
-| `/dashboard/retros` | Calibration table, closed decisions, pipeline health |
+| `supabase/migrations/` | Schema, views, RLS, RPCs (apply in order) |
+| `scripts/pipeline/` | Scheduled pipeline: ingest (demo only) → recompute facts |
+| `scripts/facts/` | Fact computation, health, outlier guard, metric registry |
+| `ml/` | Python models (forecast, churn, sentiment) |
+| `src/lib/` | Layer libraries: `diagnose`, `predict`, `prescribe`, `grounding`, `agents`, `data` |
+| `src/app/api/` | `kpi`, `diagnose`, `forecast`, `churn`, `analyze-decision`, `decisions`, `lineage`, `data/*` |
+| `src/app/dashboard/` | Dashboard, new decision, decision detail, inbox, retros, memory, data |
 
-## Trust layer
+## Scripts
 
-Every number is defensible:
+| Command | Does |
+|---------|------|
+| `npm run go-live` | Apply new migrations, seed demo data (only if empty), compute facts |
+| `npm run doctor` | Health check: env, database, schema, fact freshness, LLM key |
+| `npm run pipeline` | Run the pipeline once |
+| `npm test` | Unit tests + fact-pipeline tests |
+| `npm run typecheck` / `npm run lint` / `npm run build` | The CI gates |
 
-- **Metrics registry** (`src/lib/metrics/registry.ts`) — every metric has an id, formula, unit, freshness window, owner.
-- **Fact contract** (`src/lib/metrics/schema.ts`) — zod validates every row before upsert.
-- **Data-health score** (`scripts/facts/health.mjs`) — `freshness × completeness × source_conf`, halved if unstable.
-- **Outlier guard** (`scripts/facts/quality.mjs`) — IQR + z-score per-metric, marks `unstable=true` (never deletes).
-- **Strict grounding** (`src/lib/grounding/validate.ts`) — L4 rejects citations under health floor, past freshness, or flagged unstable.
-- **Composite confidence** (`src/lib/prescribe/confidence.ts`) — `data_health × forecast_certainty × driver_clarity × coverage`.
-- **Calibration audit** (`src/lib/audit/calibration.ts`) — hit-rate vs confidence, Brier score, gap per band.
+## Limitations and roadmap
 
-## Demo Data
+Honest list of what it does not do yet:
 
-Synthetic Savora Foods FMCG dataset — 12 SKUs (snacks/spices/RTE), 78 weeks of sales × region, inventory + competitor + demand + supply + regulatory signals. Storylines: Gopal Snacks price war (West), Delhi NCR demand spike.
+- One shared dataset per deployment (no multi-tenant workspaces).
+- Data arrives by CSV import; no live connectors (ERP, Shopify, warehouses) yet.
+- Fact retrieval is keyword-based; embedding search would match more phrasings.
+- Competitor signals are category-level (no SKU/region columns).
 
-## Key Paths
+Contributions welcome: see [CONTRIBUTING.md](CONTRIBUTING.md).
 
-- `supabase/migrations/0001_init.sql` — raw tables, facts, decisions, audit schema
-- `supabase/migrations/0002_views.sql` — analytics views
-- `supabase/migrations/0007_facts_lineage.sql` — lineage columns on `facts`
-- `scripts/facts/{compute,quality,health,ml}.mjs` — facts pipeline
-- `src/lib/{metrics,diagnose,predict,grounding,prescribe,audit}` — layer libraries
-- `src/components/{L1,L2,L3,L4,lineage,LayerTabs}` — layer UI
-- `src/app/api/{kpi,lineage,diagnose,forecast,churn,analyze-decision}` — layer endpoints
+## License
+
+[MIT](LICENSE)

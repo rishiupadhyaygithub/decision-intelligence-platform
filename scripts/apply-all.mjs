@@ -33,14 +33,57 @@ async function applySQL(sql, label) {
   return true
 }
 
+async function query(sql) {
+  const res = await fetch(`https://api.supabase.com/v1/projects/${REF}/database/query`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query: sql }),
+  })
+  const body = await res.json().catch(() => null)
+  if (!res.ok || !Array.isArray(body)) throw new Error(`query failed: ${JSON.stringify(body).slice(0, 300)}`)
+  return body
+}
+
+// Migrations are applied ONCE and recorded in _decisionos_migrations. Re-running every
+// file each time is not safe: 0013 drops and rebuilds decision_facts, which would wipe
+// every decision's citations on an existing deployment.
 async function runMigrations() {
   console.log('\n═══ STEP 1 — Schema migrations ═══')
   const files = readdirSync('supabase/migrations').filter((f) => f.endsWith('.sql')).sort()
-  let ok = true
-  for (const file of files) {
-    if (!(await applySQL(readFileSync(`supabase/migrations/${file}`, 'utf8'), file))) ok = false
+  const [state] = await query(
+    `select to_regclass('public._decisionos_migrations') is not null as tracked,
+            to_regclass('public.facts') is not null as existing`,
+  )
+
+  if (!state.tracked) {
+    if (state.existing && process.env.BASELINE !== '1') {
+      console.error(
+        '  ✗ Existing database without migration tracking. Re-running all migrations could destroy data.\n' +
+          '    If this database already has every migration in supabase/migrations applied, mark them with:\n' +
+          '      BASELINE=1 npm run go-live\n' +
+          '    Otherwise apply the missing files one by one (Supabase SQL editor), then baseline.',
+      )
+      return false
+    }
+    await query(`create table if not exists _decisionos_migrations (
+      name text primary key, applied_at timestamptz not null default now())`)
+    await query(`alter table _decisionos_migrations enable row level security`)
+    if (state.existing) {
+      const values = files.map((f) => `('${f.replace(/'/g, "''")}')`).join(',')
+      await query(`insert into _decisionos_migrations (name) values ${values} on conflict do nothing`)
+      console.log(`  ✓ Baselined ${files.length} migrations as already applied (nothing executed)`)
+      return true
+    }
   }
-  return ok
+
+  const done = new Set((await query(`select name from _decisionos_migrations`)).map((r) => r.name))
+  const pending = files.filter((f) => !done.has(f))
+  if (!pending.length) console.log('  ✓ Up to date')
+  for (const file of pending) {
+    if (!(await applySQL(readFileSync(`supabase/migrations/${file}`, 'utf8'), file))) return false
+    await query(`insert into _decisionos_migrations (name) values ('${file.replace(/'/g, "''")}') on conflict do nothing`)
+  }
+  return true
 }
 
 async function runSeed() {

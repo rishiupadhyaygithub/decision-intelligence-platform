@@ -49,6 +49,14 @@ async function stage(job, fn) {
   } catch (e) {
     await logEnd(id, 'error', null, e.message || String(e), t0)
     console.error(`✗ ${job}: ${e.message || e}`)
+    // "fetch failed" means the database never answered. On Supabase's free plan the
+    // usual cause is an auto-paused project, which silently killed this job for weeks.
+    if (/fetch failed|ENOTFOUND|ECONNREFUSED/i.test(String(e.message || e))) {
+      console.error(
+        '  hint: Supabase did not respond. If this is a free-plan project it is probably PAUSED; ' +
+          'restore it in the Supabase dashboard (Project -> Restore), then rerun. Also check NEXT_PUBLIC_SUPABASE_URL.',
+      )
+    }
     return false
   }
 }

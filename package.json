@@ -12,7 +12,9 @@
     "go-live": "node --env-file=.env.local scripts/apply-all.mjs",
     "check:supabase": "node --env-file=.env.local scripts/run-migrations.mjs",
     "facts:compute": "node --env-file=.env.local scripts/facts/compute.mjs",
-    "seed:generate": "node scripts/seed/generate.mjs"
+    "seed:generate": "node scripts/seed/generate.mjs",
+    "doctor": "node --env-file=.env.local scripts/doctor.mjs",
+    "pipeline": "node --env-file=.env.local scripts/pipeline/run.mjs"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",

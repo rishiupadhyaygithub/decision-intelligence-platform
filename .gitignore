@@ -36,6 +36,12 @@ __pycache__/
 
 # env files (can opt-in for committing if needed)
 .env*
+# the template holds variable NAMES only, never values
+!.env.example
+
+# local runtime state
+.remember/
+.venv*/
 
 # vercel
 .vercel
