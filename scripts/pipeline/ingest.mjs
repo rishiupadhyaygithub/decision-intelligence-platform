@@ -13,42 +13,61 @@ const SIGNAL_TEMPLATES = [
 ]
 
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)]
-const jitter = (base, pct) => Math.max(0, Math.round(base * (1 + (Math.random() * 2 - 1) * pct)))
+const gauss = () => {
+  // Box-Muller: a standard normal draw for week-to-week noise.
+  const u = 1 - Math.random()
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * Math.random())
+}
+const DAY = 864e5
+const MAX_WEEKS_PER_RUN = 40
 
-// Append one new day of sales (per sku/region, based on recent mean) + one signal.
+// The seed holds ONE row per sku/region/channel per WEEK (Mondays). New rows must
+// keep that grain: the old daily stream wrote a week's worth of units every day,
+// which multiplied weekly totals ~7x and turned every trend and forecast into noise.
+// Appends each missing week up to the current one (so the demo stays current),
+// mean-reverting to the series' recent level with mild noise.
 async function generate(sb) {
-  // referential integrity: only use sku/region pairs that already exist
   const { data: recent, error } = await sb
     .from('sales')
     .select('sku_id,region,channel,sale_date,units,revenue')
     .order('sale_date', { ascending: false })
-    .limit(400)
+    .limit(600)
   if (error) throw new Error(`ingest read sales: ${error.message}`)
   if (!recent?.length) throw new Error('ingest: no sales to extend')
 
-  const latest = recent[0].sale_date
-  const next = new Date(latest)
-  next.setUTCDate(next.getUTCDate() + 1)
-  const nextDate = next.toISOString().slice(0, 10)
-
-  // mean units/revenue per sku|region|channel from recent history
-  const agg = {}
+  const latest = Date.parse(recent[0].sale_date)
+  const series = {}
   for (const r of recent) {
+    // only the last 8 weeks inform the level
+    if (latest - Date.parse(r.sale_date) > 7 * 8 * DAY) continue
     const k = `${r.sku_id}\0${r.region}\0${r.channel}`
-    ;(agg[k] ??= { u: [], rev: [] }).u.push(Number(r.units))
-    agg[k].rev.push(Number(r.revenue))
+    const s = (series[k] ??= { units: [], rev: [], last: null })
+    s.units.push(Number(r.units))
+    s.rev.push(Number(r.revenue))
+    if (s.last === null) s.last = Number(r.units)
   }
   const mean = (a) => a.reduce((x, y) => x + y, 0) / a.length
 
-  const rows = Object.entries(agg).slice(0, 24).map(([k, v]) => {
-    const [sku_id, region, channel] = k.split('\0')
-    const units = jitter(mean(v.u), 0.18)
-    const unitRev = mean(v.rev) / (mean(v.u) || 1)
-    return { sku_id, region, channel, sale_date: nextDate, units, revenue: Math.round(units * unitRev * 100) / 100 }
-  })
+  // Next Monday after the latest row, up to and including the current week's Monday.
+  const now = new Date()
+  const thisMonday = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - ((now.getUTCDay() + 6) % 7))
+  const rows = []
+  for (let t = latest + 7 * DAY, n = 0; t <= thisMonday && n < MAX_WEEKS_PER_RUN; t += 7 * DAY, n++) {
+    const date = new Date(t).toISOString().slice(0, 10)
+    for (const [k, s] of Object.entries(series)) {
+      const [sku_id, region, channel] = k.split('\0')
+      const level = mean(s.units)
+      const unitRev = mean(s.rev) / (level || 1)
+      const units = Math.max(0, Math.round(s.last + 0.35 * (level - s.last) + level * 0.06 * gauss()))
+      s.last = units
+      rows.push({ sku_id, region, channel, sale_date: date, units, revenue: Math.round(units * unitRev * 100) / 100 })
+    }
+  }
 
-  const { error: insErr } = await sb.from('sales').upsert(rows, { onConflict: 'sku_id,region,channel,sale_date', ignoreDuplicates: false })
-  if (insErr) throw new Error(`ingest upsert sales: ${insErr.message}`)
+  if (rows.length) {
+    const { error: insErr } = await sb.from('sales').upsert(rows, { onConflict: 'sku_id,region,channel,sale_date', ignoreDuplicates: true })
+    if (insErr) throw new Error(`ingest upsert sales: ${insErr.message}`)
+  }
 
   const t = pick(SIGNAL_TEMPLATES)
   const { error: sigErr } = await sb.from('competitor_signal').insert({
