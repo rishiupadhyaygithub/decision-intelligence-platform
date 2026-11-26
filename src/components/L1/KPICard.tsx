@@ -41,11 +41,12 @@ function healthColor(h: number | null): string {
   return 'bg-rose-100 text-rose-800'
 }
 
+// "SC-001, West" rather than "sku=SC-001 · region=West".
 function dimsLabel(dims: Record<string, unknown>): string {
-  const parts = Object.entries(dims)
-    .filter(([, v]) => v != null && v !== '')
-    .map(([k, v]) => `${k}=${v}`)
-  return parts.join(' · ')
+  return Object.values(dims)
+    .filter((v) => v != null && v !== '')
+    .map(String)
+    .join(', ')
 }
 
 export function KPICard({ kpi }: { kpi: Kpi }) {
@@ -53,12 +54,12 @@ export function KPICard({ kpi }: { kpi: Kpi }) {
 
   return (
     <>
-      <div className="rounded-lg border border-neutral-200 bg-white p-4 shadow-sm">
+      <div className="rounded-xl border border-line bg-white p-4">
         <div className="flex items-start justify-between gap-2">
           <div className="text-sm font-medium text-neutral-700">{kpi.label}</div>
           {kpi.unstable ? (
             <span
-              className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-rose-800"
+              className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-semibold text-rose-800"
               title="Outlier guard tripped"
             >
               unstable
@@ -70,8 +71,8 @@ export function KPICard({ kpi }: { kpi: Kpi }) {
           type="button"
           onClick={() => kpi.fact_id && setOpen(true)}
           disabled={!kpi.fact_id}
-          className="mt-2 text-left text-3xl font-semibold text-neutral-900 tabular-nums hover:underline disabled:cursor-not-allowed disabled:no-underline"
-          title={kpi.fact_id ? `fact_id: ${kpi.fact_id}` : ''}
+          className="mt-2 text-left text-3xl font-semibold tracking-tight text-neutral-900 hover:underline decoration-slate-300 underline-offset-4 disabled:cursor-not-allowed disabled:no-underline"
+          title={kpi.fact_id ? 'See how this number was computed' : ''}
         >
           {formatValue(kpi.value, kpi.unit)}
         </button>
@@ -80,9 +81,9 @@ export function KPICard({ kpi }: { kpi: Kpi }) {
           <span className="truncate">{dimsLabel(kpi.dims) || '—'}</span>
           <span
             className={`rounded px-2 py-0.5 font-medium ${healthColor(kpi.data_health)}`}
-            title="Data health = freshness × completeness × source confidence"
+            title="Data quality: how fresh, complete and reliable the underlying rows are"
           >
-            health {kpi.data_health != null ? kpi.data_health.toFixed(2) : '—'}
+            {kpi.data_health != null ? `${Math.round(kpi.data_health * 100)}% data quality` : 'quality unknown'}
           </span>
         </div>
       </div>

@@ -5,7 +5,6 @@
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import TopNav from '@/components/TopNav'
 
 type Decision = {
   id: string
@@ -56,8 +55,7 @@ export default async function InboxPage() {
   for (const d of decisions) byUrgency[d.urgency] = (byUrgency[d.urgency] ?? 0) + 1
 
   return (
-    <div className="min-h-screen bg-neutral-50">
-      <TopNav />
+    <div className="min-h-full">
       <main className="mx-auto max-w-6xl px-6 py-8">
         <div className="flex items-start justify-between">
           <div>
@@ -88,7 +86,7 @@ export default async function InboxPage() {
 
         <div className="mt-6 overflow-hidden rounded-lg border border-neutral-200 bg-white shadow-sm">
           <table className="w-full text-sm">
-            <thead className="bg-neutral-50 text-left text-xs uppercase tracking-wide text-neutral-500">
+            <thead className="bg-neutral-50 text-left text-xs text-neutral-500">
               <tr>
                 <th className="px-4 py-2">Title</th>
                 <th className="px-4 py-2">Type</th>
@@ -167,7 +165,7 @@ function Stat({
         : 'bg-emerald-50 border-emerald-200'
   return (
     <div className={`rounded-lg border p-4 ${bg}`}>
-      <div className="text-xs uppercase tracking-wide text-neutral-600">{label}</div>
+      <div className="text-xs text-neutral-600">{label}</div>
       <div className="mt-1 text-2xl font-semibold tabular-nums text-neutral-900">{value}</div>
     </div>
   )

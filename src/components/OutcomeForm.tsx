@@ -53,7 +53,7 @@ export default function OutcomeForm({ decisionId }: { decisionId: string }) {
     <form onSubmit={submit} className="space-y-3">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="sm:col-span-2">
-          <label className="block text-[11px] uppercase tracking-wide text-slate-400 mb-1">Metric</label>
+          <label className="block text-xs font-medium text-slate-600 mb-1.5">Metric</label>
           <input
             value={metric}
             onChange={(e) => setMetric(e.target.value)}
@@ -63,7 +63,7 @@ export default function OutcomeForm({ decisionId }: { decisionId: string }) {
           />
         </div>
         <div>
-          <label className="block text-[11px] uppercase tracking-wide text-slate-400 mb-1">Predicted</label>
+          <label className="block text-xs font-medium text-slate-600 mb-1.5">Predicted</label>
           <input
             value={predicted}
             onChange={(e) => setPredicted(e.target.value)}
@@ -74,7 +74,7 @@ export default function OutcomeForm({ decisionId }: { decisionId: string }) {
           />
         </div>
         <div>
-          <label className="block text-[11px] uppercase tracking-wide text-slate-400 mb-1">Actual · measured</label>
+          <label className="block text-xs font-medium text-slate-600 mb-1.5">Actual (measured)</label>
           <input
             value={actual}
             onChange={(e) => setActual(e.target.value)}
@@ -85,7 +85,7 @@ export default function OutcomeForm({ decisionId }: { decisionId: string }) {
           />
         </div>
         <div className="sm:col-span-2">
-          <label className="block text-[11px] uppercase tracking-wide text-slate-400 mb-1">Horizon (optional)</label>
+          <label className="block text-xs font-medium text-slate-600 mb-1.5">Time frame (optional)</label>
           <input
             value={horizon}
             onChange={(e) => setHorizon(e.target.value)}

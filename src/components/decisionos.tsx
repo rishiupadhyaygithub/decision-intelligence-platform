@@ -17,7 +17,7 @@ export function Brand() {
 export function StatCard({ label, value, hint }: { label: string; value: ReactNode; hint?: string }) {
   return (
     <div className="bg-white rounded-xl border border-slate-200 p-5">
-      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</p>
+      <p className="text-xs font-medium text-slate-500">{label}</p>
       <p className="mt-1 text-3xl font-semibold text-slate-900">{value}</p>
       {hint && <p className="mt-1 text-xs text-slate-400">{hint}</p>}
     </div>
@@ -80,7 +80,7 @@ export function Gauge({ value, label }: { value: number | null; label: string })
         </text>
       </svg>
       <div>
-        <p className="text-[11px] uppercase tracking-wide text-slate-400">{label}</p>
+        <p className="text-[11px] text-slate-400">{label}</p>
         <p className="text-xs text-slate-500">computed · /100</p>
       </div>
     </div>

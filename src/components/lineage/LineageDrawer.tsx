@@ -73,7 +73,7 @@ export function LineageDrawer({ factId, onClose }: { factId: string; onClose: ()
       >
         <div className="flex items-start justify-between">
           <div>
-            <div className="text-xs uppercase tracking-wide text-neutral-500">Fact Lineage</div>
+            <div className="text-xs text-neutral-500">Fact Lineage</div>
             <div className="mt-1 font-mono text-sm text-neutral-800">{factId}</div>
           </div>
           <button
@@ -172,7 +172,7 @@ export function LineageDrawer({ factId, onClose }: { factId: string; onClose: ()
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section>
-      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+      <h3 className="mb-2 text-xs font-semibold text-neutral-500">
         {title}
       </h3>
       <div className="space-y-1">{children}</div>

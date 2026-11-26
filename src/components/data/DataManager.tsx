@@ -38,7 +38,8 @@ interface Result {
   error?: string
 }
 
-const card = 'bg-white rounded-xl border border-slate-200 p-6'
+const card = 'rounded-2xl border border-line bg-white p-6'
+const COUNT_LABEL = { skus: 'Products', sales: 'Weekly sales rows', inventory: 'Stock counts', signals: 'Market signals', facts: 'Computed facts' } as const
 const fmt = (iso: string | null) => (iso ? new Date(iso).toLocaleString() : '—')
 
 export default function DataManager() {
@@ -101,7 +102,7 @@ export default function DataManager() {
     <>
       <section className={card}>
         <div className="flex items-center justify-between">
-          <h2 className="font-medium text-slate-900">Current dataset</h2>
+          <h2 className="text-base font-semibold text-slate-900">What the app is using now</h2>
           <span
             className={`text-xs rounded px-2 py-0.5 border ${
               demo ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'
@@ -113,7 +114,7 @@ export default function DataManager() {
         <dl className="mt-4 grid grid-cols-2 sm:grid-cols-5 gap-3 text-sm">
           {(['skus', 'sales', 'inventory', 'signals', 'facts'] as const).map((k) => (
             <div key={k} className="rounded-lg bg-slate-50 border border-slate-200 px-3 py-2">
-              <dt className="text-[11px] uppercase tracking-wide text-slate-400">{k}</dt>
+              <dt className="text-xs text-slate-500">{COUNT_LABEL[k]}</dt>
               <dd className="font-medium text-slate-900">{status.counts[k].toLocaleString()}</dd>
             </div>
           ))}
@@ -129,9 +130,9 @@ export default function DataManager() {
       </section>
 
       <section className={card}>
-        <h2 className="font-medium text-slate-900">Back up</h2>
+        <h2 className="text-base font-semibold text-slate-900">Step 1. Download a backup</h2>
         <p className="text-sm text-slate-500 mt-1">
-          Download the current dataset in the import format. Do this before replacing it. The same files work as templates.
+          One CSV per table, already in the import format. Keep these before replacing anything; they also show exactly how your own files should look.
         </p>
         <div className="mt-3 flex flex-wrap gap-2">
           {DATASETS.map((d) => (
@@ -147,12 +148,12 @@ export default function DataManager() {
       </section>
 
       <section className={card}>
-        <h2 className="font-medium text-slate-900">Import your data</h2>
+        <h2 className="text-base font-semibold text-slate-900">Step 2. Check your files, then replace</h2>
         {!status.can_import ? (
           <p className="mt-2 text-sm text-slate-600">
             {status.admin_configured
-              ? 'Only admins can replace the dataset. Ask an admin to add your email to ADMIN_EMAILS.'
-              : 'Imports are disabled until the server sets ADMIN_EMAILS (comma-separated admin emails).'}
+              ? 'Only admins can replace the data. Ask whoever runs this app to add your email to ADMIN_EMAILS.'
+              : 'Importing is turned off. To turn it on, add your email to ADMIN_EMAILS in .env.local (comma-separated for several people) and restart the app.'}
           </p>
         ) : (
           <>

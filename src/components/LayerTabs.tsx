@@ -47,14 +47,14 @@ export function LayerTabs({
 
   useEffect(() => {
     if (active !== 'L1' || kpis) return
-    fetch(`/api/kpi?limit=12`)
+    fetch(`/api/kpi?limit=12&sku=${encodeURIComponent(sku)}&region=${encodeURIComponent(region)}`)
       .then(async (r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`)
         return r.json() as Promise<{ kpis: Kpi[] }>
       })
       .then((d) => setKpis(d.kpis))
       .catch((e: Error) => setKpiErr(e.message))
-  }, [active, kpis])
+  }, [active, kpis, sku, region])
 
   return (
     <div>
@@ -70,7 +70,7 @@ export function LayerTabs({
                 : 'bg-neutral-100 text-neutral-700 hover:bg-neutral-200'
             }`}
           >
-            <div className="text-[10px] font-semibold uppercase tracking-wide opacity-70">
+            <div className="text-[10px] font-semibold opacity-70">
               {t.key}
             </div>
             <div className="font-medium">{t.label}</div>

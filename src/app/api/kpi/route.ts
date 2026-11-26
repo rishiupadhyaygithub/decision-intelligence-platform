@@ -4,6 +4,7 @@
 
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { metricLabel } from '@/lib/labels'
 
 type FactRow = {
   id: string
@@ -28,17 +29,21 @@ type Kpi = {
   dims: Record<string, unknown>
 }
 
-const LABELS: Record<string, { label: string; unit: Kpi['unit'] }> = {
-  revenue_trend_recent: { label: 'Revenue Trend (recent vs base)', unit: 'pct' },
-  revenue_anomaly_z: { label: 'Revenue Anomaly (z-score)', unit: 'score' },
-  margin_pct: { label: 'Margin %', unit: 'pct' },
-  sku_velocity_delta: { label: 'SKU Velocity Δ', unit: 'pct' },
-  inventory_cover_ratio: { label: 'Inventory Cover', unit: 'ratio' },
-  competitor_pressure_pct: { label: 'Competitor Pressure %', unit: 'pct' },
+// Plain-language labels come from src/lib/labels.ts. revenue_anomaly_z is left out of
+// the default set: the 4-week revenue trend says the same thing without a z-score.
+const UNITS: Record<string, Kpi['unit']> = {
+  sku_velocity_delta: 'pct',
+  inventory_cover_ratio: 'ratio',
+  margin_pct: 'pct',
+  revenue_trend_recent: 'pct',
+  competitor_pressure_pct: 'pct',
 }
+const LABELS: Record<string, { label: string; unit: Kpi['unit'] }> = Object.fromEntries(
+  Object.entries(UNITS).map(([m, unit]) => [m, { label: metricLabel(m), unit }]),
+)
 
 function toKpi(f: FactRow): Kpi {
-  const meta = LABELS[f.metric] ?? { label: f.metric, unit: 'count' as const }
+  const meta = LABELS[f.metric] ?? { label: metricLabel(f.metric), unit: 'count' as const }
   return {
     key: `${f.metric}:${JSON.stringify(f.dims)}`,
     label: meta.label,
@@ -62,6 +67,9 @@ export async function GET(request: Request) {
   const metricsParam = url.searchParams.get('metrics')
   const minHealth = Number(url.searchParams.get('min_health') ?? '0')
   const limit = Math.min(Number(url.searchParams.get('limit') ?? '24'), 200)
+  // Optional context: only facts about this product and/or region, most specific first.
+  const sku = url.searchParams.get('sku')
+  const region = url.searchParams.get('region')
 
   const metrics = metricsParam
     ? metricsParam.split(',').map((s) => s.trim()).filter(Boolean)
@@ -74,14 +82,30 @@ export async function GET(request: Request) {
     )
     .in('metric', metrics)
     .order('computed_at', { ascending: false })
-    .limit(limit)
+    .limit(sku || region ? 200 : limit)
 
   if (error) {
     console.error('kpi: query failed', error)
     return NextResponse.json({ error: 'internal_error' }, { status: 500 })
   }
 
-  const rows = (data ?? []) as FactRow[]
+  let rows = (data ?? []) as FactRow[]
+  if (sku || region) {
+    const relevance = (r: FactRow) => {
+      const s = r.dims?.sku
+      const g = r.dims?.region
+      if (sku && region && s === sku && g === region) return 3
+      if (sku && s === sku && g == null) return 2
+      if (region && g === region && s == null) return 2
+      return 0
+    }
+    rows = rows
+      .map((r) => ({ r, score: relevance(r) }))
+      .filter((x) => x.score > 0)
+      .sort((a, b) => b.score - a.score || metrics.indexOf(a.r.metric) - metrics.indexOf(b.r.metric))
+      .map((x) => x.r)
+      .slice(0, limit)
+  }
   const filtered = minHealth > 0
     ? rows.filter((r) => (r.data_health ?? 0) >= minHealth)
     : rows

@@ -1,7 +1,6 @@
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import TopNav from '@/components/TopNav'
 import { SyntheticNote } from '@/components/decisionos'
 import type { MemoryEntry } from '@/lib/types'
 
@@ -22,8 +21,7 @@ export default async function MemoryView() {
   const memories = data ?? []
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <TopNav email={user.email} />
+    <div className="min-h-full">
       <main className="max-w-4xl mx-auto px-6 py-8 space-y-4">
         <Link href="/dashboard" className="text-sm text-slate-500 hover:text-slate-900">
           ← Dashboard

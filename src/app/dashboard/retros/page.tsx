@@ -4,7 +4,6 @@
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import TopNav from '@/components/TopNav'
 import { computeCalibration, type Outcome as CalOutcome } from '@/lib/audit/calibration'
 
 type OutcomeRow = {
@@ -78,8 +77,7 @@ export default async function RetrosPage() {
   }
 
   return (
-    <div className="min-h-screen bg-neutral-50">
-      <TopNav />
+    <div className="min-h-full">
       <main className="mx-auto max-w-6xl px-6 py-8 space-y-8">
         <div>
           <h1 className="text-2xl font-semibold text-neutral-900">Retros & Calibration</h1>
@@ -106,7 +104,7 @@ export default async function RetrosPage() {
                 Overall hit-rate: <span className="tabular-nums font-semibold">{cal.overall_hit_rate}%</span>
               </div>
               <table className="w-full text-sm">
-                <thead className="text-left text-xs uppercase tracking-wide text-neutral-500">
+                <thead className="text-left text-xs text-neutral-500">
                   <tr>
                     <th className="py-1">Band</th>
                     <th className="py-1 text-right">N</th>
@@ -147,7 +145,7 @@ export default async function RetrosPage() {
             <p className="mt-3 text-sm text-neutral-500">No outcomes logged.</p>
           ) : (
             <table className="mt-3 w-full text-sm">
-              <thead className="text-left text-xs uppercase tracking-wide text-neutral-500">
+              <thead className="text-left text-xs text-neutral-500">
                 <tr>
                   <th className="py-1">Decision</th>
                   <th className="py-1">Metric</th>
@@ -202,7 +200,7 @@ export default async function RetrosPage() {
             <Stat label="Unknown" value={healthBuckets.unknown} tone="neutral" />
           </div>
 
-          <h3 className="mt-6 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+          <h3 className="mt-6 text-xs font-semibold text-neutral-500">
             Recent job runs
           </h3>
           {jobs.length === 0 ? (
@@ -281,7 +279,7 @@ function Stat({
           : 'bg-neutral-50 border-neutral-200'
   return (
     <div className={`rounded-lg border p-3 ${bg}`}>
-      <div className="text-[10px] uppercase tracking-wide text-neutral-600">{label}</div>
+      <div className="text-[10px] text-neutral-600">{label}</div>
       <div className="mt-1 text-xl font-semibold tabular-nums text-neutral-900">{value}</div>
     </div>
   )

@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // No floating Next.js dev badge over the product UI.
+  devIndicators: false,
   turbopack: {
     root: process.cwd(),
   },

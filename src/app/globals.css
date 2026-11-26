@@ -4,6 +4,65 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* ---------------------------------------------------------------------------
+   DecisionOS palette. Existing screens use Tailwind's slate / neutral / indigo
+   classes; remapping those scales restyles every page consistently:
+     slate, neutral -> cool slate ink (text, lines, surfaces)
+     indigo         -> shelf green (primary actions, focus)
+   Paper #F6F7F5 · Ink #12212E · Shelf #0F7B5F · Amber #B86E00 · Brick #B4342C
+   --------------------------------------------------------------------------- */
+@theme {
+  --color-slate-50: #f6f7f5;
+  --color-slate-100: #edf0ee;
+  --color-slate-200: #dde2df;
+  --color-slate-300: #c3cbc8;
+  --color-slate-400: #8d999e;
+  --color-slate-500: #637079;
+  --color-slate-600: #4a5763;
+  --color-slate-700: #34414d;
+  --color-slate-800: #22303c;
+  --color-slate-900: #12212e;
+  --color-slate-950: #0b1620;
+
+  --color-neutral-50: #f6f7f5;
+  --color-neutral-100: #edf0ee;
+  --color-neutral-200: #dde2df;
+  --color-neutral-300: #c3cbc8;
+  --color-neutral-400: #8d999e;
+  --color-neutral-500: #637079;
+  --color-neutral-600: #4a5763;
+  --color-neutral-700: #34414d;
+  --color-neutral-800: #22303c;
+  --color-neutral-900: #12212e;
+  --color-neutral-950: #0b1620;
+
+  --color-indigo-50: #ecf7f3;
+  --color-indigo-100: #d2ede3;
+  --color-indigo-200: #a7dac8;
+  --color-indigo-300: #6fbfa4;
+  --color-indigo-400: #37a07f;
+  --color-indigo-500: #16896a;
+  --color-indigo-600: #0f7b5f;
+  --color-indigo-700: #0c644e;
+  --color-indigo-800: #0b503f;
+  --color-indigo-900: #0a4134;
+
+  --color-paper: #f6f7f5;
+  --color-ink: #12212e;
+  --color-shelf: #0f7b5f;
+  --color-watch: #b86e00;
+  --color-act: #b4342c;
+  --color-line: #dde2df;
+
+  --animate-rise: rise 520ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -48,7 +107,7 @@
 }
 
 :root {
-  --font-sans-stack: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-sans-stack: var(--font-grotesk), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono-stack: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
@@ -123,9 +182,27 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground antialiased;
+    @apply text-foreground antialiased;
+    background: var(--color-paper);
+  }
+  /* Figures line up in columns. Applied per element (class "num"), not on body:
+     this face's tabular feature also widens commas and periods in running text. */
+  .num {
+    font-variant-numeric: tabular-nums;
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-shelf);
+    outline-offset: 2px;
   }
   html {
     @apply font-sans;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 1ms !important;
+    animation-delay: 0ms !important;
+    transition-duration: 1ms !important;
   }
 }

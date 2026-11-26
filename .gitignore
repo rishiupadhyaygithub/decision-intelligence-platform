@@ -67,3 +67,6 @@ supabase/.temp/
 *.local.csv
 v_region_demand.csv
 v_sku_velocity.csv
+
+# browser test artifacts
+.playwright-mcp/

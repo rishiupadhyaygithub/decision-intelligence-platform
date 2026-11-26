@@ -119,8 +119,10 @@ export function ForecastChart({
   }
   if (!fc || !ch) return <Skeleton rows={2} label="Running forecast" />
 
+  // Last 26 weeks of history is enough context; older weeks only flatten the chart.
+  const recent = fc.history.slice(-26)
   const rows: Merged[] = [
-    ...fc.history.map((h) => ({
+    ...recent.map((h) => ({
       week: h.week,
       actual: h.value,
       p50: null,
@@ -135,118 +137,107 @@ export function ForecastChart({
       band_width: Math.max(0, p.p90 - p.p10),
     })),
   ]
+  const next = fc.forecast.point[0]
+  const fmtWeek = (iso: string) => new Date(iso + 'T00:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' })
+  const n = (v: number) => Math.round(v).toLocaleString()
+  const h = fc.forecast.holdout
+  const dip = ch.ml_churn?.risk_score ?? ch.churn.risk_score
 
   return (
     <div className="space-y-4">
-      <div className="rounded-lg border border-neutral-200 bg-white p-4">
-        <div className="flex items-baseline justify-between">
-          <h3 className="text-sm font-semibold text-neutral-800">
-            Forecast — {sku} · {region} · next {fc.forecast.horizon} wks
-          </h3>
+      <div className="rounded-xl border border-line bg-white p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h3 className="text-base font-semibold text-slate-900">
+              Next {fc.forecast.horizon} weeks for {sku} in {region}
+            </h3>
+            {next ? (
+              <p className="mt-1 text-sm text-slate-600">
+                Next week: about <span className="font-semibold text-slate-900">{n(next.p50)}</span> units, likely between{' '}
+                {n(next.p10)} and {n(next.p90)}.
+              </p>
+            ) : (
+              <p className="mt-1 text-sm text-slate-500">{fc.note}</p>
+            )}
+          </div>
           <span
-            className={`rounded px-2 py-0.5 text-xs font-medium ${bandColor(ch.churn.risk_score)}`}
-            title={`Churn: ${ch.churn.band} (${ch.churn.reasons.join('; ')})`}
+            className={`rounded-full px-2.5 py-1 text-xs font-medium ${bandColor(dip)}`}
+            title={ch.churn.reasons.join('; ')}
           >
-            churn {(ch.churn.risk_score * 100).toFixed(0)}%
+            {(dip * 100).toFixed(0)}% chance of a sales dip
           </span>
         </div>
 
-        <div className="mt-3 h-72 w-full">
+        <div className="mt-4 h-64 w-full">
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={rows} margin={{ top: 8, right: 12, left: 0, bottom: 8 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
-              <XAxis dataKey="week" fontSize={10} tick={{ fill: '#666' }} />
-              <YAxis fontSize={10} tick={{ fill: '#666' }} />
-              <Tooltip />
-              <Legend wrapperStyle={{ fontSize: 10 }} />
-              <Area
-                dataKey="band_low"
-                stackId="band"
-                stroke="none"
-                fill="transparent"
-                legendType="none"
-                name="p10"
+            <AreaChart data={rows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+              <CartesianGrid vertical={false} stroke="#edf0ee" />
+              <XAxis dataKey="week" tickFormatter={fmtWeek} tick={{ fontSize: 11, fill: '#637079' }} axisLine={false} tickLine={false} minTickGap={32} />
+              <YAxis tick={{ fontSize: 11, fill: '#637079' }} axisLine={false} tickLine={false} width={44} domain={[(min: number) => Math.floor(min * 0.85), (max: number) => Math.ceil(max * 1.08)]} />
+              <Tooltip
+                contentStyle={{ borderRadius: 10, border: '1px solid #dde2df', fontSize: 12 }}
+                labelFormatter={(w) => `Week of ${fmtWeek(String(w))}`}
+                formatter={(v, name) => (name === 'Likely range' ? [null, null] : [n(Number(v)), name])}
               />
-              <Area
-                dataKey="band_width"
-                stackId="band"
-                stroke="#94a3b8"
-                fill="#cbd5e1"
-                fillOpacity={0.4}
-                name="p10–p90 band"
-              />
-              <Line dataKey="actual" stroke="#0f172a" strokeWidth={2} dot={false} name="actual" />
-              <Line dataKey="p50" stroke="#2563eb" strokeDasharray="4 3" dot={false} name="p50 forecast" />
+              <Legend wrapperStyle={{ fontSize: 12 }} />
+              <Area dataKey="band_low" stackId="band" stroke="none" fill="transparent" legendType="none" name="low" />
+              <Area dataKey="band_width" stackId="band" stroke="none" fill="#0f7b5f" fillOpacity={0.14} name="Likely range" />
+              <Line dataKey="actual" stroke="#12212e" strokeWidth={2} dot={false} name="Actual units" />
+              <Line dataKey="p50" stroke="#0f7b5f" strokeWidth={2} strokeDasharray="5 4" dot={false} name="Forecast" />
             </AreaChart>
           </ResponsiveContainer>
         </div>
 
-        <div className="mt-3 grid grid-cols-2 gap-3 text-xs text-neutral-600 sm:grid-cols-4">
-          <Stat label="method" value={fc.forecast.method} />
-          <Stat label="n_train" value={fc.forecast.n_train} />
-          <Stat label="cv" value={fc.forecast.cv} />
-          {fc.forecast.holdout ? (
+        <dl className="mt-4 grid grid-cols-1 gap-3 border-t border-line pt-4 text-sm sm:grid-cols-3">
+          <Stat label="Learned from" value={`${fc.forecast.n_train} weeks of sales`} />
+          <Stat label="Typical miss" value={`about ±${n(fc.forecast.residual_sigma)} units a week`} />
+          {h ? (
             <Stat
-              label={`holdout skill (last ${fc.forecast.holdout.n}w)`}
-              value={`${(fc.forecast.holdout.skill * 100).toFixed(0)}% vs naive`}
+              label={`Tested on the last ${h.n} weeks`}
+              value={h.skill > 0.02 ? `${(h.skill * 100).toFixed(0)}% more accurate than a naive guess` : 'no better than repeating last week: treat as rough'}
             />
-          ) : null}
-          <Stat label="σ_resid" value={fc.forecast.residual_sigma} />
-        </div>
-
-        <div className="mt-3 text-[11px] text-neutral-500">
-          α={fc.forecast.alpha} · β={fc.forecast.beta} · φ={fc.forecast.phi}
-        </div>
-
-        <div className="mt-2 flex flex-wrap gap-1">
-          {fc.input_fact_ids.slice(0, 8).map((fid) => (
-            <button
-              key={fid}
-              type="button"
-              onClick={() => setOpenFactId(fid)}
-              className="rounded bg-neutral-100 px-2 py-0.5 font-mono text-[10px] text-neutral-700 hover:bg-neutral-200"
-            >
-              {fid}
-            </button>
-          ))}
-        </div>
-
-        <p className="mt-3 text-[11px] italic leading-snug text-neutral-500">{fc.note}</p>
+          ) : (
+            <Stat label="Accuracy check" value="needs 10+ weeks of history" />
+          )}
+        </dl>
+        {fc.input_fact_ids.length > 0 && (
+          <p className="mt-3 text-xs text-slate-500">
+            Based on{' '}
+            {fc.input_fact_ids.slice(0, 4).map((fid, i) => (
+              <button key={fid} type="button" onClick={() => setOpenFactId(fid)} className="mr-1 font-medium text-indigo-700 underline decoration-indigo-200 underline-offset-2">
+                evidence {i + 1}
+              </button>
+            ))}
+          </p>
+        )}
       </div>
 
-      <div className="rounded-lg border border-neutral-200 bg-white p-4 text-sm">
-        <div className="flex items-baseline justify-between">
-          <h4 className="text-sm font-semibold text-neutral-800">Churn drivers</h4>
-          <span className="text-xs text-neutral-500">{ch.churn.method}</span>
-        </div>
-        <ul className="mt-2 space-y-1 text-neutral-700">
+      <div className="rounded-xl border border-line bg-white p-5 text-sm">
+        <h4 className="text-base font-semibold text-slate-900">Why a dip could happen</h4>
+        <ul className="mt-2 space-y-1 text-slate-700">
           {ch.churn.reasons.map((r, i) => (
-            <li key={i}>• {r}</li>
+            <li key={i}>{r === 'no dominant signal' ? 'No single warning sign stands out.' : r[0].toUpperCase() + r.slice(1) + '.'}</li>
           ))}
         </ul>
         {ch.ml_churn ? (
-          <p className="mt-2 text-xs text-neutral-600">
-            Trained model: <span className="font-medium">{(ch.ml_churn.risk_score * 100).toFixed(0)}%</span> risk that{' '}
-            {ch.ml_churn.predicts} <span className="text-neutral-400">({ch.ml_churn.method})</span>
+          <p className="mt-2 text-slate-600">
+            The trend model gives a <span className="font-semibold">{(ch.ml_churn.risk_score * 100).toFixed(0)}%</span> chance that next week&apos;s
+            units fall more than 15% below the recent average.
           </p>
         ) : null}
-        <div className="mt-3 flex flex-wrap gap-1">
-          {ch.cited_fact_ids.map((fid) => (
-            <button
-              key={fid}
-              type="button"
-              onClick={() => setOpenFactId(fid)}
-              className="rounded bg-neutral-100 px-2 py-0.5 font-mono text-[10px] text-neutral-700 hover:bg-neutral-200"
-            >
-              {fid}
-            </button>
-          ))}
-        </div>
+        {ch.cited_fact_ids.length > 0 && (
+          <p className="mt-3 text-xs text-slate-500">
+            Based on{' '}
+            {ch.cited_fact_ids.map((fid, i) => (
+              <button key={fid} type="button" onClick={() => setOpenFactId(fid)} className="mr-1 font-medium text-indigo-700 underline decoration-indigo-200 underline-offset-2">
+                evidence {i + 1}
+              </button>
+            ))}
+          </p>
+        )}
       </div>
 
-      {openFactId ? (
-        <LineageDrawer factId={openFactId} onClose={() => setOpenFactId(null)} />
-      ) : null}
+      {openFactId ? <LineageDrawer factId={openFactId} onClose={() => setOpenFactId(null)} /> : null}
     </div>
   )
 }
@@ -254,8 +245,8 @@ export function ForecastChart({
 function Stat({ label, value }: { label: string; value: string | number }) {
   return (
     <div>
-      <div className="text-[10px] uppercase tracking-wide text-neutral-500">{label}</div>
-      <div className="tabular-nums text-neutral-800">{value}</div>
+      <dt className="text-xs text-slate-500">{label}</dt>
+      <dd className="text-slate-800">{value}</dd>
     </div>
   )
 }

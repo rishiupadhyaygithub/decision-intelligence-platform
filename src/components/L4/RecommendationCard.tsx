@@ -70,7 +70,7 @@ export function RecommendationCard({ analysis }: { analysis: Analysis }) {
       <div className="rounded-lg border border-neutral-200 bg-white p-4 shadow-sm">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <div className="text-xs uppercase tracking-wide text-neutral-500">
+            <div className="text-xs text-neutral-500">
               Recommendation
             </div>
             <p className="mt-1 text-base font-semibold text-neutral-900">
@@ -78,9 +78,9 @@ export function RecommendationCard({ analysis }: { analysis: Analysis }) {
             </p>
           </div>
           <div className={`rounded-md border px-3 py-2 text-right ${bandColor(c.band)}`}>
-            <div className="text-[10px] uppercase tracking-wide">confidence</div>
+            <div className="text-[10px]">confidence</div>
             <div className="tabular-nums text-lg font-bold">{c.score}</div>
-            <div className="text-[10px] uppercase">{c.band}</div>
+            <div className="text-[10px]">{c.band}</div>
           </div>
         </div>
 
@@ -125,7 +125,7 @@ export function RecommendationCard({ analysis }: { analysis: Analysis }) {
                       {o.expected_impact_pct}% expected
                     </span>
                   ) : null}
-                  <span className="rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-neutral-600">
+                  <span className="rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] text-neutral-600">
                     {o.key}
                   </span>
                 </div>
@@ -175,7 +175,7 @@ export function RecommendationCard({ analysis }: { analysis: Analysis }) {
 function Cmp({ label, v }: { label: string; v: number }) {
   return (
     <div>
-      <div className="text-[10px] uppercase tracking-wide text-neutral-500">{label}</div>
+      <div className="text-[10px] text-neutral-500">{label}</div>
       <div className="tabular-nums text-neutral-800">{v.toFixed(2)}</div>
     </div>
   )
