@@ -1,17 +1,15 @@
 # DecisionOS
 
-**Open-source decision intelligence: from your sales data to an auditable recommendation, where every number cites its source.**
+**Open-source decision intelligence for consumer-goods teams: concrete actions with a rupee figure, a live simulator, and results measured from your own sales.**
 
-BI dashboards show what happened. Chatbots guess what to do. DecisionOS answers four questions in order and shows its work at every step:
+Dashboards show what happened and leave the decision to you. DecisionOS proposes the decision:
 
-| Layer | Question | How |
-|-------|----------|-----|
-| **L1 Descriptive** | What happened? | KPIs computed into a `facts` store; every number carries a `fact_id` and a data-health score |
-| **L2 Diagnostic** | Why did it happen? | Ridge-regression driver decomposition + MAD anomaly detection |
-| **L3 Predictive** | What will happen? | Damped exponential smoothing with bootstrap P10/P50/P90 bands, out-of-sample holdout skill, churn risk |
-| **L4 Prescriptive** | What should we do? | Grounded LLM reasoning (Gemini) behind a strict citation gate, a skeptic pass, tradeoffs and composite confidence. Falls back to a deterministic, fully cited answer when the LLM is unavailable |
+- **Action inbox.** Every week it turns sales, stock and margins into ranked actions: *order 3,228 units of Bhujia Premium for West (protects ₹2.8L of sales)*, *move 2,376 units of Upma Mix from West to South*, *run 10% off Turmeric in North to free ₹46k of cash*. Each comes with the numbers behind it and its assumptions.
+- **Simulate before you commit.** Drag the quantity or discount; the impact and the stock projection (with vs without the action) recompute instantly.
+- **Accept, adjust or dismiss.** Decisions are logged per person. Results are measured automatically from the weekly sales that follow, so the log shows what actually happened.
+- **Ask anything.** Plain-language questions get a recommendation drafted by an LLM, argued against by a second model, and checked so every number cites a computed fact.
 
-Click any number to open its lineage: formula, source rows, freshness, health. Saved decisions keep an immutable snapshot of every fact they cited, and you can record outcomes to close the loop.
+Impact figures are arithmetic on your own data plus explicit assumptions (resupply time, safety stock, price response) shown on every action; the LLM never invents a number. The approach follows what decision-intelligence leaders do (Aera's accept/modify/reject inbox, o9 and Peak's what-if simulation, Cloverpop's decision log), in a form a small team can self-host.
 
 ## Quick start
 

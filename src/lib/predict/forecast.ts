@@ -214,3 +214,25 @@ export function forecast(series: Series[], horizon = 4): ForecastOutput {
     holdout: holdoutCheck(y),
   }
 }
+
+/**
+ * Deterministic expected values for the next `horizon` weeks (no bootstrap noise),
+ * plus fit quality. Used where the same input must always give the same number,
+ * e.g. the action engine's order quantities.
+ */
+export function expectedNext(series: Series[], horizon = 4): { values: number[]; cv: number; skill: number | null } {
+  const y = [...series].sort((a, b) => a.week.localeCompare(b.week)).map((s) => s.value).filter((v) => Number.isFinite(v))
+  if (y.length < 6) return { values: [], cv: 1, skill: null }
+  const best = gridFit(y)
+  const { fitted } = desDamped(y, best.alpha, best.beta, best.phi)
+  const resid = y.slice(1).map((v, i) => v - fitted[i + 1])
+  const mean = resid.reduce((a, b) => a + b, 0) / (resid.length || 1)
+  const sigma = Math.sqrt(resid.reduce((a, r) => a + (r - mean) ** 2, 0) / (resid.length || 1))
+  const yMean = y.reduce((a, b) => a + b, 0) / y.length
+  return {
+    values: pointForecast(y, best.alpha, best.beta, best.phi, horizon),
+    cv: yMean ? sigma / Math.abs(yMean) : 1,
+    skill: holdoutCheck(y)?.skill ?? null,
+  }
+}
+

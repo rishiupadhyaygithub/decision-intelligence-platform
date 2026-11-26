@@ -2,15 +2,13 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { LayoutGrid, ListChecks, PenLine, Database, BookOpen, LineChart, LogOut } from 'lucide-react'
+import { Inbox, MessageSquareText, ScrollText, Database, LogOut } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
 
 const NAV = [
-  { href: '/dashboard', label: 'Brief', icon: LayoutGrid, exact: true },
-  { href: '/dashboard/new-decision', label: 'New decision', icon: PenLine },
-  { href: '/dashboard/inbox', label: 'Decisions', icon: ListChecks },
-  { href: '/dashboard/retros', label: 'Track record', icon: LineChart },
-  { href: '/dashboard/memory', label: 'Lessons', icon: BookOpen },
+  { href: '/dashboard', label: 'Inbox', icon: Inbox, exact: true },
+  { href: '/dashboard/new-decision', label: 'Ask', icon: MessageSquareText },
+  { href: '/dashboard/log', label: 'Log', icon: ScrollText },
   { href: '/dashboard/data', label: 'Data', icon: Database },
 ]
 
