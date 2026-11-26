@@ -45,7 +45,7 @@ export async function POST(request: Request) {
   const { sku, region, target } = body
 
   const [velRes, invRes, compRes, factRes] = await Promise.all([
-    supabase.from('v_sku_velocity').select('*').eq('sku_id', sku).eq('region', region),
+    supabase.from('v_sku_velocity').select('*').eq('sku_id', sku).eq('region', region).order('week'),
     supabase.from('v_inventory_risk').select('*').eq('sku_id', sku).eq('region', region),
     // v_competitor_pressure is a category rollup with no week column, so we go
     // to the raw table and bucket by ISO-week Monday to align with velocity.

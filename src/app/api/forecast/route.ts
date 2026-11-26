@@ -37,7 +37,7 @@ export async function POST(request: Request) {
   const { sku, region, horizon, target } = body
 
   const [velRes, factRes] = await Promise.all([
-    supabase.from('v_sku_velocity').select('*').eq('sku_id', sku).eq('region', region),
+    supabase.from('v_sku_velocity').select('*').eq('sku_id', sku).eq('region', region).order('week'),
     supabase
       .from('facts')
       .select('id, metric, dims')
@@ -58,6 +58,8 @@ export async function POST(request: Request) {
       value: Number(target === 'revenue' ? (r.revenue ?? r.units) : r.units),
     }))
     .filter((s) => Number.isFinite(s.value))
+    // Views have no inherent order; an unsorted history drew the chart back and forth in time.
+    .sort((a, b) => a.week.localeCompare(b.week))
 
   const out = forecast(series, horizon)
 
