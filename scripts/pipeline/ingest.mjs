@@ -69,6 +69,12 @@ async function generate(sb) {
     if (insErr) throw new Error(`ingest upsert sales: ${insErr.message}`)
   }
 
+  const invRows = await rollInventory(sb, now)
+  if (invRows.length) {
+    const { error: invErr } = await sb.from('inventory').insert(invRows)
+    if (invErr) throw new Error(`ingest insert inventory: ${invErr.message}`)
+  }
+
   const t = pick(SIGNAL_TEMPLATES)
   const { error: sigErr } = await sb.from('competitor_signal').insert({
     source: 'synthetic-stream',
@@ -80,7 +86,56 @@ async function generate(sb) {
   })
   if (sigErr) throw new Error(`ingest insert signal: ${sigErr.message}`)
 
-  return rows.length + 1
+  return rows.length + invRows.length + 1
+}
+
+
+// Inventory is a month-end snapshot per sku/region in the seed. Without this, stock
+// data froze at the seed's last month while sales kept moving, so every stock
+// warning would describe a stale world. Appends each missing month-end up to the
+// latest completed month, mean-reverting each series' on_hand/reorder ratio.
+async function rollInventory(sb, now) {
+  const { data, error } = await sb
+    .from('inventory')
+    .select('sku_id,region,snapshot_date,on_hand,reorder_point')
+    .order('snapshot_date', { ascending: false })
+    .limit(600)
+  if (error) throw new Error(`ingest read inventory: ${error.message}`)
+  if (!data?.length) return []
+
+  const latest = data[0].snapshot_date
+  const series = {}
+  for (const r of data) {
+    const k = `${r.sku_id}\0${r.region}`
+    const s = (series[k] ??= { ratios: [], last: null, reorder: Number(r.reorder_point) })
+    if (s.ratios.length < 6) s.ratios.push(Number(r.on_hand) / (Number(r.reorder_point) || 1))
+    if (s.last === null) s.last = Number(r.on_hand) / (Number(r.reorder_point) || 1)
+  }
+  const mean = (a) => a.reduce((x, y) => x + y, 0) / a.length
+
+  // Month-ends after `latest`, up to the end of last month.
+  const ends = []
+  let y = Number(latest.slice(0, 4))
+  let m = Number(latest.slice(5, 7)) // 1-based month of the latest snapshot
+  for (let i = 0; i < 24; i++) {
+    m += 1
+    if (m > 12) { m = 1; y += 1 }
+    const end = new Date(Date.UTC(y, m, 0)) // day 0 of next month = last day of month m
+    if (end >= new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))) break
+    ends.push(end.toISOString().slice(0, 10))
+  }
+
+  const rows = []
+  for (const date of ends) {
+    for (const [k, s] of Object.entries(series)) {
+      const [sku_id, region] = k.split('\0')
+      const level = mean(s.ratios)
+      const ratio = Math.max(0.15, s.last + 0.4 * (level - s.last) + 0.18 * gauss())
+      s.last = ratio
+      rows.push({ sku_id, region, snapshot_date: date, on_hand: Math.round(ratio * s.reorder), reorder_point: s.reorder })
+    }
+  }
+  return rows
 }
 
 // Public entrypoint. Returns number of rows ingested.
