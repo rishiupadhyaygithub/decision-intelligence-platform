@@ -67,11 +67,13 @@ for (const [id, name, cat, mrp, cost] of SKUS) {
 }
 
 // sales rows (weekly, per sku x home-region)
+const weeklyBase = {} // sku|region -> base weekly units, so inventory can be sized in weeks of cover
 const seasonal = (d) => 1 + 0.18 * Math.sin((d.getUTCMonth() / 12) * 2 * Math.PI) // mild yearly cycle
 for (const [id, , cat, mrp] of SKUS) {
   const skuMeta = SKUS.find((s) => s[0] === id)
   for (const region of skuMeta[5]) {
     const base = 400 + Math.floor(rand() * 600)
+    weeklyBase[`${id}|${region}`] = base
     const channel = CHANNEL[cat]
     WEEKS.forEach((d, wi) => {
       let mult = seasonal(d) * (0.85 + rand() * 0.3)
@@ -93,21 +95,30 @@ for (const [id, , cat, mrp] of SKUS) {
   }
 }
 
-// inventory monthly snapshots (last 18 months) per sku x home-region
+// inventory monthly snapshots (last 18 months) per sku x home-region.
+// Calibrated in WEEKS OF COVER against the same series' weekly sales: stock levels
+// that ignore demand made every product look out of stock (0.3 to 1.5 weeks).
+// Reorder point = 2 weeks of demand (1 week lead time + 1 week safety stock).
 const MONTHS = []
 {
   const end = new Date('2026-05-01T00:00:00Z')
   for (let i = 17; i >= 0; i--) MONTHS.push(new Date(end.getUTCFullYear(), end.getUTCMonth() - i, 1))
 }
-for (const [id, , , , ] of SKUS) {
+const COVER_STORY = {
+  'SC-001|West': 0.9, // price-war squeeze: short
+  'SC-003|Delhi NCR': 1.1, // viral spike outran supply
+  'SM-004|North': 9.5, // slow seller, overstocked
+}
+for (const [id] of SKUS) {
   const skuMeta = SKUS.find((s) => s[0] === id)
   for (const region of skuMeta[5]) {
-    const reorder = 300 + Math.floor(rand() * 200)
-    MONTHS.forEach((m) => {
-      let onHand = Math.round(reorder * (0.8 + rand() * 1.4))
-      // SC-001 West runs low at the end (the price-war squeeze)
-      if (id === 'SC-001' && region === 'West' && m >= new Date(2026, 3, 1))
-        onHand = Math.round(reorder * 0.7)
+    const weekly = weeklyBase[`${id}|${region}`] ?? 600
+    const reorder = Math.round(weekly * 2)
+    const endCover = COVER_STORY[`${id}|${region}`]
+    MONTHS.forEach((m, mi) => {
+      let cover = 2.5 + rand() * 4 // healthy 2.5 to 6.5 weeks
+      if (endCover && mi >= MONTHS.length - 2) cover = endCover
+      const onHand = Math.round(weekly * cover)
       lines.push(
         `insert into inventory (sku_id,region,snapshot_date,on_hand,reorder_point) values (${q(id)},${q(region)},${q(day(m))},${onHand},${reorder});`,
       )
